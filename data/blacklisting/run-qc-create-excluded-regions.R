@@ -152,10 +152,11 @@ stopifnot(dim(dat)[[1]] == dim(udat)[[1]])
 # First create plot with geom_density
 gg <- ggplot(data = dat %>% dplyr::filter(dataset %in% c("10X", "DLP", "JBL"), !extrema), aes(x = gc, y = ratio)) +
   geom_point(cex = 0.5) + 
-  ylab("Median of normalized reads per bin") + 
   facet_wrap(~dataset) +
   geom_density_2d(size = 0.8, n = 100, color="red", bins=150) + theme_cowplot() + 
-  geom_smooth(aes(x=gc, y=ratio), color="blue", model="gam")
+  geom_smooth(aes(x=gc, y=ratio), color="blue", model="gam") +
+  theme_pubclean(base_size=20)+
+  ylab("Median of normalized reads per bin")
 gg
 
 
@@ -163,7 +164,6 @@ gg <- ggplot(data = dat %>% dplyr::filter(dataset %in% c("10X", "DLP", "JBL"), !
              aes(x = gc, y = ratio, color=as.factor(ratio > d_u | ratio < d_l))) +
   geom_point(data = dat %>% dplyr::filter(dataset %in% c("10X", "DLP"), !extrema), aes(x = gc, y = ratio, color=as.factor(ratio > d_u | ratio < d_l)), cex = 0.5) + 
   geom_point(data = dat %>% dplyr::filter(dataset %in% c("JBL"), !extrema), aes(x = gc, y = ratio, color=as.factor(ratio > d_uu | ratio < d_ll)), cex = 0.5) + 
-  ylab("Median of normalized reads per bin") + 
   facet_wrap(~dataset) +
   scale_colour_manual( values = c("TRUE" = "black","FALSE" = "lightblue")) + 
   geom_density_2d(size = 0.8, n = 100, color="red", bins=150) +
@@ -176,7 +176,8 @@ gg <- ggplot(data = dat %>% dplyr::filter(dataset %in% c("10X", "DLP", "JBL"), !
                dplyr::filter(gc > 32 & gc < 60), aes(x=gc, y=d_uu), color="black", size=0.1) + 
   geom_point(data=dat %>% dplyr::filter(dataset %in% c("JBL"), !extrema) %>%
                dplyr::filter(gc > 32 & gc < 60), aes(x=gc, y=d_ll), color="black", size=0.1) + 
-  xlab("GC content") + theme_pubclean() +
+  ylab("Median of normalized reads per bin") + 
+  xlab("GC content") + theme_pubclean(base_size = 20) +
   theme(legend.position = "none") + theme(strip.background = element_blank(),
                                           strip.placement = "outside",
                                           strip.text.x = element_text(size = 14))
@@ -273,13 +274,14 @@ p = ggplot(data = decision %>% dplyr::filter(dataset %in% c("10X", "DLP", "JBL")
   geom_point(data=decision %>% dplyr::filter(dataset %in% c("JBL")) %>% dplyr::filter(gc > 32 & gc < 60), 
              aes(x=gc, y=d_ll), color="black", size=0.1) + 
   scale_colour_manual(values = c("FALSE" = "#00BFC4","TRUE" = "#F8766D")) + 
-  coord_cartesian(ylim=c(0,2)) + theme_pubclean() +
+  coord_cartesian(ylim=c(0,2)) +
+  theme_pubclean(base_size = 20) +
   guides(color = guide_legend("Outlier bin ", override.aes = list(size = 3))) +
   theme(
     legend.background=element_blank(),
     #legend.box.background = element_rect(color="white", size=2),
     legend.key = element_rect(colour = "white", fill=NA),
-    legend.text = element_text(size = 12, colour = "red"),
+    legend.text = element_text(size = 12, colour = "black"),
     legend.title = element_text(face = "bold")
   ) + 
   ylab("Median of normalized reads per bin") + xlab("GC content") + 
@@ -298,7 +300,7 @@ p2 = ggplot(data = decision %>% dplyr::filter(dataset %in% c("10X", "DLP", "JBL"
   scale_colour_manual(values = c("FALSE" = "#00BFC4","TRUE" = "#F8766D")) + 
   #scale_colour_manual( values = c("TRUE" = "blue","FALSE" = "red")) + 
   coord_cartesian(ylim=c(0,2)) + 
-  ylab("Median of normalized reads per bin") + xlab("Mappability") + theme_pubclean() + 
+  ylab("Median of normalized reads per bin") + xlab("Mappability") + theme_pubclean(base_size=20) + 
   theme(legend.position = "none") + theme(strip.background = element_blank(),
                                           strip.placement = "outside",
                                           strip.text.x = element_text(size = 14))
@@ -372,12 +374,12 @@ S_fig_QC = ggpubr::ggarrange(ggpubr::ggarrange(gg + rremove("ylab"),
 
 # Annotate the figure by adding a common labels
 S_fig_QC = annotate_figure(S_fig_QC,
-                left = text_grob("Median of normalized read counts", rot = 90, size=13))
+                left = text_grob("Median of normalized read counts", rot = 90, size=22))
 S_fig_QC
 
-stop("Manually uncomment file export to overwrite existing file!")
 ggpubr::ggexport(S_fig_QC,filename = "~/scAbsolute/figures/Sup_QC-Autosomes.pdf", height = 9, width = 16)
 
+stop("Manually uncomment file export to overwrite existing file!")
 #rtracklayer::export.bed(subject, "~/scAbsolute/data/blacklisting/final_exclude_regions_hg19_1-22.bed")
 
 reads_lost = apply(CN@assayData$probdloss, 2, function(x){
