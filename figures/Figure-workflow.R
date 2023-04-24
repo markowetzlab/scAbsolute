@@ -360,6 +360,18 @@ Fig_workflow_C = ggarrange(joint + theme_pubclean(base_size=30),
 Fig_workflow_C 
 ggexport(Fig_workflow_C, filename = "~/scAbsolute/figures/Fig_workflow_C.pdf", width = 12, height = 5)
 
+Fig_workflow_C_demo = ggpubr::ggarrange(p1+rremove('xlab')+rremove("ylab")+
+                          theme(axis.ticks.x=element_blank(),
+                                plot.margin = unit(c(5.0, 15, 5.0, 4.0), "pt")),
+                          NULL,
+                          p2+rremove("ylab")+ #rremove("y.title") +
+                            theme(axis.ticks.x=element_blank(),
+                                  plot.margin = unit(c(5.0, 10, 5.0, 4.0), "pt")),
+                          nrow=3, heights = c(1, 0.15, 1))
+
+Fig_workflow_C_demo
+ggexport(Fig_workflow_C_demo, filename = "~/scAbsolute/figures/Fig_workflow_C_demo.pdf", width = 12, height = 5)
+
 #  ggpubr::ggarrange(p2,
 #                    gridExtra::grid.arrange(gt, left = "read counts", clip="on", padding = unit(0.0, "line")), p1b_legend, ncol=3, widths = c(30, 10, 3)),
 #  ggpubr::ggarrange(im1, pp4, ncol=2, widths=c(1,3), labels=c("C", "D")),

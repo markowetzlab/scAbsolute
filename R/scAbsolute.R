@@ -212,7 +212,6 @@ evaluateScalings <- function(segmCN, fiti, cellname,
         # extract diff read information
         high_quality_regions = createGR(segmCN[,cellname])
         high_quality_regions = high_quality_regions[valid]
-        chromosome = decode(seqnames(high_quality_regions))
         
         read_position_table = readr::read_tsv(position_path, col_types = "cdd", col_names=TRUE) %>%
           dplyr::filter(!is.na(start))
@@ -221,26 +220,49 @@ evaluateScalings <- function(segmCN, fiti, cellname,
                              IRanges(read_position_table$start, read_position_table$start+abs(read_position_table$length)-1),
                              length=abs(read_position_table$length),
                              dist=c(diff(read_position_table$start), Inf))
+        read_table = GenomicRanges::sort(read_table, ignore.strand=TRUE)
+        # identify reads in high quality regions
+        hits = findOverlaps(read_table, high_quality_regions, type="within")
+        hq = read_table[queryHits(hits)]
         
-        hits = findOverlaps(high_quality_regions, read_table)
-        hq = read_table[subjectHits(hits)]
-        n_overlap = countOverlaps(hq, hq)
-        
-        filter_dists <- function(x){
-          return(x[x < quantile(x, 0.99, na.rm=TRUE)])
+        # averages 
+        chromosome = decode(high_quality_regions@seqnames)
+        cov = GenomicRanges::coverage(hq)
+      
+        # overlap regions (average) 
+        peaks_overlap = cov
+        for(ls in names(peaks_overlap)){
+          y = peaks_overlap[[ls]] 
+          runValue(y)[runValue(y) == 1] = 0;
+          peaks_overlap[[ls]] = y
+        }
+        no_overlap = cov
+        for(ls in names(no_overlap)){
+          y = no_overlap[[ls]] 
+          runValue(y)[runValue(y) != 0] = -1;
+          runValue(y)[runValue(y) == 0] = 1;
+          runValue(y)[runValue(y) == -1] = 0;
+          no_overlap[[ls]] = y
         }
         
-        validate_fitdistr <- function(x){
-          x = x[!is.na(x)]
-          if(length(x) == 0 | all(x == 0)){
-            return(0)
-          }else{
-            return(x)
-          }
-        }
+        common_levels = base::intersect(names(peaks_overlap), unique(seqnames(high_quality_regions)))
+        peaks_overlap = peaks_overlap[common_levels]
+        cov = cov[common_levels]
+        no_overlap = no_overlap[common_levels]
+        high_quality_regions = keepSeqlevels(high_quality_regions, common_levels, pruning.mode="coarse")
         
-        temp = dplyr::tibble(element = queryHits(hits), dists = read_table[subjectHits(hits)]$dist,
-                             chrom = chromosome[queryHits(hits)], n_overlap=n_overlap)
+        gr_overlap_2 = binnedAverage(high_quality_regions, peaks_overlap, "overlap")
+        gr_overlap_all = binnedAverage(high_quality_regions, cov, "overlap")
+        gr_no_overlap = binnedAverage(high_quality_regions, no_overlap, "no_overlap")
+    
+        temp = dplyr::tibble(chrom = chromosome,
+                             bin_start = high_quality_regions@ranges@start,
+                             bin_end = high_quality_regions@ranges@start + high_quality_regions@ranges@width - 1,
+                             bin_index = 1:length(high_quality_regions), 
+                             overlap=gr_overlap_2$overlap,
+                             overlap_all=gr_overlap_all$overlap,
+                             no_overlap=gr_no_overlap$no_overlap, status="average")
+    
       }
     }
     # end compute position information
@@ -330,23 +352,24 @@ evaluateScalings <- function(segmCN, fiti, cellname,
           position_path = sub("\\/\\/", "\\/", file.path(Biobase::pData(segmCN)[cellname,"bampath"], (paste0(sub('\\.bam$', '', Biobase::pData(segmCN)[cellname,"bamfile"]), ".position.tsv"))))
           if(readPositionModel && file.exists(position_path) && !(file.info(position_path)$size == 0)){
 
-            temp$copy = Y_prime[queryHits(hits)]
+            temp$copy = Y_prime
+            stopifnot(length(Y_prime) == dim(temp)[[1]])
 
-            dens = temp %>% dplyr::filter(chrom %in% sub("chr", "", selectRegion), copy > 0, dists >= 0) %>% dplyr::group_by(chrom, element, copy) %>%
-              dplyr::summarise(n=n(),
-                               elem_overlap = mean(n_overlap, na.rm=TRUE), 
-                               p_geom = MASS::fitdistr(validate_fitdistr(dists[1:(length(dists)-1)]), densfun = "geometric")[["estimate"]],
-                               p_geom_censored = MASS::fitdistr(validate_fitdistr(filter_dists(dists[1:(length(dists)-1)])), densfun = "geometric")[["estimate"]],
-                               .groups = 'keep') %>%
+            dens = temp %>% dplyr::filter(chrom %in% sub("chr", "", selectRegion), copy > 0) %>%
               dplyr::group_by(chrom, copy) %>%
               dplyr::summarise(n_elem = n(),
-                               mean_overlap = mean(elem_overlap, na.rm=TRUE), median_overlap = median(elem_overlap, na.rm=TRUE),
-                               mgp = mean(p_geom, na.rm=TRUE), mgpc = mean(p_geom_censored, na.rm=TRUE), medgp = median(p_geom, na.rm=TRUE), medgpc = median(p_geom_censored, na.rm=TRUE),
-                               .groups = 'keep') %>% dplyr::ungroup()
+                               mean_overlap = mean(overlap, na.rm=TRUE), 
+                               mean_overlap_all = mean(overlap_all, na.rm=TRUE), 
+                               mean_no_overlap = mean(no_overlap, na.rm=TRUE), 
+                               median_overlap = median(overlap, na.rm=TRUE), 
+                               median_overlap_all = median(overlap_all, na.rm=TRUE), 
+                               median_no_overlap = median(no_overlap, na.rm=TRUE), 
+                               .groups = 'keep') %>%
+              dplyr::ungroup()
             
             dty = dens$mean_overlap[dens$copy >= 1 & dens$n_elem >= 10 & dens$copy <= (maxStates-2)]
-            dtz.mgeom = dens$mgp[dens$copy >= 1  & dens$n_elem >= 10 & dens$copy <= (maxStates-2)] 
-            dtz.mgeom_censored = dens$mgpc[dens$copy >= 1  & dens$n_elem >= 10 & dens$copy <= (maxStates-2)] 
+            dtz.no_overlap = dens$mean_no_overlap[dens$copy >= 1  & dens$n_elem >= 10 & dens$copy <= (maxStates-2)] 
+            dtz.overlap_all = dens$mean_overlap_all[dens$copy >= 1  & dens$n_elem >= 10 & dens$copy <= (maxStates-2)] 
             dtx = dens$copy[dens$copy >= 1 & dens$n_elem >= 10 & dens$copy <= (maxStates-2)]
             n_elem = dens$n_elem[dens$copy >= 1 & dens$n_elem >= 10 & dens$copy <= (maxStates-2)]
             
@@ -355,16 +378,16 @@ evaluateScalings <- function(segmCN, fiti, cellname,
               prediction.quality = 0
               prediction.diploid = NA
               prediction.value = NA
-              prediction.value.pgeom = NA
-              prediction.value.pgeom_censored = NA
+              prediction.value.mean_no_overlap = NA
+              prediction.value.overlap_all = NA
             }else{
               
               if(length(unique(dens$copy)) == 1){
                 # single copy number state
                 prediction.diploid = median(rep(dty, times=n_elem), na.rm=TRUE)
                 prediction.value = median(rep(dty, times=n_elem), na.rm=TRUE)
-                prediction.value.pgeom = median(rep(dtz.mgeom, times=n_elem), na.rm=TRUE)
-                prediction.value.pgeom_censored = median(rep(dtz.mgeom_censored, times=n_elem), na.rm=TRUE)
+                prediction.value.mean_no_overlap = median(rep(dtz.no_overlap, times=n_elem), na.rm=TRUE)
+                prediction.value.overlap_all = median(rep(dtz.overlap_all, times=n_elem), na.rm=TRUE)
                 prediction.quality = NA
               }else{
                 prediction.diploid = median(rep(dty, times=n_elem), na.rm=TRUE)
@@ -390,15 +413,15 @@ evaluateScalings <- function(segmCN, fiti, cellname,
                 prediction.quality = prediction.output.overlap[["prediction.quality"]]
                 
                 ## predict robust regression
-                prediction.value.pgeom <- tryCatch(
+                prediction.value.mean_no_overlap <- tryCatch(
                   {
-                    model.pgeom = withCallingHandlers( robustbase::lmrob(prediction.pgeom ~ copy + I(copy^2), weights=weight,
+                    model.mean_no_overlap = withCallingHandlers( robustbase::lmrob(prediction.mean_no_overlap ~ copy + I(copy^2), weights=weight,
                                                                        data = data.frame(copy=dtx,
-                                                                                         prediction.pgeom=dtz.mgeom,
+                                                                                         prediction.mean_no_overlap=dtz.no_overlap,
                                                                                          weight=n_elem),
                                                                        control=lmrob_control))
-                    prediction.value.pgeom= predict(model.pgeom, newdata=dplyr::tibble(copy=2.0))
-                    prediction.value.pgeom[[1]]
+                    prediction.value.mean_no_overlap= predict(model.mean_no_overlap, newdata=dplyr::tibble(copy=2.0))
+                    prediction.value.mean_no_overlap[[1]]
                     # prediction.quality = summary(model)[["adj.r.squared"]]
                     # list("prediction"=pred[[1]], "prediction.quality"=prediction.quality)
                   },
@@ -409,15 +432,15 @@ evaluateScalings <- function(segmCN, fiti, cellname,
                 )
                 
                 ## predict robust regression
-                prediction.value.pgeom_censored <- tryCatch(
+                prediction.value.overlap_all <- tryCatch(
                   {
-                    model.pgeom = withCallingHandlers( robustbase::lmrob(prediction.pgeom_censored ~ copy + I(copy^2) + 0, weights=weight,
+                    model.overlap_all = withCallingHandlers( robustbase::lmrob(prediction.overlap_all ~ copy + I(copy^2) + 0, weights=weight,
                                                                        data = data.frame(copy=dtx,
-                                                                                         prediction.pgeom_censored=dtz.mgeom_censored,
+                                                                                         prediction.overlap_all=dtz.overlap_all,
                                                                                          weight=n_elem),
                                                                        control=lmrob_control))
-                    prediction.value.pgeom_censored= predict(model.pgeom, newdata=dplyr::tibble(copy=2.0))
-                    prediction.value.pgeom_censored[[1]]
+                    prediction.value.overlap_all= predict(model.overlap_all, newdata=dplyr::tibble(copy=2.0))
+                    prediction.value.overlap_all[[1]]
                     # prediction.quality = summary(model)[["adj.r.squared"]]
                     # list("prediction"=pred[[1]], "prediction.quality"=prediction.quality)
                   },
@@ -435,15 +458,15 @@ evaluateScalings <- function(segmCN, fiti, cellname,
               prediction.value=NA
               prediction.diploid=NA
               prediction.quality=NA
-              prediction.value.pgeom = NA
-              prediction.value.pgeom_censored = NA
+              prediction.value.mean_no_overlap = NA
+              prediction.value.overlap_all = NA
             }
           }else{
             prediction.value=NA
             prediction.diploid=NA
             prediction.quality=NA
-            prediction.value.pgeom = NA
-            prediction.value.pgeom_censored = NA
+            prediction.value.mean_no_overlap = NA
+            prediction.value.overlap_all = NA
           }
         
         if(is.null(ddpl)){
@@ -457,7 +480,7 @@ evaluateScalings <- function(segmCN, fiti, cellname,
           name=cellname, n_reads=n_reads, scale=int_scale, rpc=rpc,
           error=error_seg_l2,  ploidy=ploidy, n_bins = n_bins,
           prediction=prediction.value, prediction.diploid=prediction.diploid, prediction.quality=prediction.quality,
-          prediction.pgeom = prediction.value.pgeom, prediction.pgeom_censored = prediction.value.pgeom_censored,
+          prediction.mean_no_overlap = prediction.value.mean_no_overlap, prediction.overlap_all = prediction.value.overlap_all,
           scaling.rpc_var=rpc.var, scaling.rpc_median=rpc.median, scaling.rpc_robust=rpc.robust,
           scaling.rpc_p95=rpc.p95, scaling.rpc_95=rpc.95, scaling.rpc_99=rpc.99), ddpl$df,
           dplyr::tibble(fit_flag=TRUE,
@@ -483,7 +506,7 @@ evaluateScalings <- function(segmCN, fiti, cellname,
       name=cellname, n_reads=segmCN[,cellname]@phenoData@data$used.reads, scale=1.0, rpc=0.0,
       error=Inf, ploidy=0.0, n_bins=n_bins,
       prediction=NA, prediction.36 =NA, prediction.125=NA, prediction.0=NA, prediction.diploid=NA, prediction.quality=NA,
-      prediction.pgeom = NA, prediction.pgeom_censored = NA,
+      prediction.mean_no_overlap = NA, prediction.overlap_all = NA,
       scaling.rpc_var=NA, scaling.rpc_median=NA, scaling.rpc_robust=NA,
       scaling.rpc_p95=NA, scaling.rpc_95=NA, scaling.rpc_99=NA), ddpl_scaffold,
       dplyr::tibble(fit_flag=FALSE,
@@ -812,7 +835,7 @@ scAbsolute <- function(input, method="error", globalModel=NULL,
         initialTestStatistic = testStatistic
       }
       initialSegmentedCounts = segment(readCounts, penalty = "MBIC", pen.value = NULL, testStatistic = initialTestStatistic,
-                                       splitPerChromosome=TRUE)
+                                       splitPerChromosome=ifelse(binSize<=500, TRUE, FALSE))
       initialSegmentedCountsCorrected = initial_gc_correction(initialSegmentedCounts)
       end_time <- Sys.time()
       print(paste0("AB initialSegment runtime ",  difftime(end_time,start_time,units="mins")))
@@ -855,26 +878,54 @@ scAbsolute <- function(input, method="error", globalModel=NULL,
     end_time <- Sys.time()
     print(paste0("D cellcycleMetadata runtime ",  difftime(end_time,start_time,units="mins")))
   }
-
+    
+  # SCALING
+  # NOTE in case binSizes >= 1MB, the scAbsolute algorithm doesn't work
+  # in this case, the ploidy needs to be specified via minPloidy=maxPloidy
+  valid = binsToUseInternal(segmentedCounts)
+  if( binSize > 1000 ){
+    #dim(segmentedCounts)[[2]] == 1 && length(unique(Biobase::assayDataElement(segmentedCounts, "segmented")[valid,1])) == 1){
+    warning("Scaling for binSize > 1MB -> directly assigning ploidy")
+    stopifnot(maxPloidy == minPloidy)
+    ploidy = minPloidy
+    if(ncol(segmentedCounts) == 1){
+      total_reads = sum(Biobase::assayDataElement(segmentedCounts, "calls")[valid, 1, drop=FALSE], na.rm=TRUE)
+    }else{
+      total_reads = apply(Biobase::assayDataElement(segmentedCounts, "calls")[valid,], 2, sum, na.rm=TRUE)
+    }
+    rpc = total_reads / (ploidy * sum(valid))
+    scaledCN = applyScale(segmentedCounts, scale=1/rpc)
+    description = Biobase::phenoData(scaledCN)
+    description$rpc = rpc
+    description$ploidy = ploidy
+    description$scale = 1/rpc
+    description$alpha = NA
+    Biobase::phenoData(scaledCN) = description
+    
+  }else{
+    
+  # run in all other cases
   
-  ## 5. compute best fit using absolute graphical model and stochastic variational inference
-  # (NOTE that this computation is done in python and requires reticulate and other python dependencies)
-  # we use randomSeed to set the python random seed
-  start_time <- Sys.time()
-  fit = computeScale(segmentedCounts, truncation = truncation, batchSize=batchSize, 
-                     n_init = n_init, n_steps = n_steps,
-                     randomSeed=randomSeed, verbosity=2)
-  end_time <- Sys.time()
-  print(paste0("E computeScale runtime ",  difftime(end_time,start_time,units="mins")))
-
-  ## 6. select optimal copy number fit based either on error or on existing model
-  # model approach is based on a global model of the mean-variance relationship in these kind of count data
-  start_time <- Sys.time()
-  scaledCN = selectSolution(segmentedCounts, fit, method=method, globalModel=globalModel, debug=debug, limitPloidy=limitPloidy,
-                            maxStates=max_states,
-                            ploidyWindow=ploidyWindow, minPloidy=minPloidy, maxPloidy=maxPloidy, ploidyRegion=ploidyRegion,
-                            trimLength = trimLength, minLength = minLength, quick=quick, readPositionModel=readPositionModel)
-  end_time <- Sys.time()
+    ## 5. compute best fit using absolute graphical model and stochastic variational inference
+    # (NOTE that this computation is done in python and requires reticulate and other python dependencies)
+    # we use randomSeed to set the python random seed
+    start_time <- Sys.time()
+    fit = computeScale(segmentedCounts, truncation = truncation, batchSize=batchSize, 
+                       n_init = n_init, n_steps = n_steps,
+                       randomSeed=randomSeed, verbosity=2)
+    end_time <- Sys.time()
+    print(paste0("E computeScale runtime ",  difftime(end_time,start_time,units="mins")))
+  
+    ## 6. select optimal copy number fit based either on error or on existing model
+    # model approach is based on a global model of the mean-variance relationship in these kind of count data
+    start_time <- Sys.time()
+    scaledCN = selectSolution(segmentedCounts, fit, method=method, globalModel=globalModel, debug=debug, limitPloidy=limitPloidy,
+                              maxStates=max_states,
+                              ploidyWindow=ploidyWindow, minPloidy=minPloidy, maxPloidy=maxPloidy, ploidyRegion=ploidyRegion,
+                              trimLength = trimLength, minLength = minLength, quick=quick, readPositionModel=readPositionModel)
+    end_time <- Sys.time()
+  }
+  
   if(any(Biobase::pData(scaledCN)[["rpc"]] <= 0.0)){
          warning(paste0("Sample failed - ploidy constraint unsatisfiable\n", Biobase::pData(scaledCN)[["name"]]))
   }
@@ -894,14 +945,20 @@ scAbsolute <- function(input, method="error", globalModel=NULL,
   program_end_time <- Sys.time()
 
   if(!skipForEvaluation){
+    
       countdata = selectChromosomes(scaledsegmentedCN, exclude=c("X", "Y"))
-      valid = binsToUseInternal(countdata)
-      countdat = Biobase::assayDataElement(countdata, "calls")
-      fitdistrs = suppressWarnings(lapply(1:ncol(scaledsegmentedCN), function(li) return(MASS::fitdistr(countdat[valid, li], 'negative binomial'))))
+      alpha = c(); alpha_diploid = c(); alpha_lim = c();
+      for(cell in 1:ncol(countdata)){
+        alpha = c(alpha, estimate_overdispersion(countdata[, cell], robust=NULL))
+        alpha_diploid = c(alpha_diploid, estimate_overdispersion(countdata[, cell], robust=setdiff(seq(0, max_states), 2)))
+        alpha_lim = c(alpha_lim, estimate_overdispersion(countdata[, cell], robust=c(0, max_states-1)))
+      }
+      
       description <- Biobase::pData(scaledsegmentedCN)
       description$runtime = difftime(program_end_time,program_start_time,units="mins")
-      description$fitdistr.mu = unlist(lapply(fitdistrs, function(x) return(x[["estimate"]][["mu"]])))
-      description$fitdistr.alpha = unlist(lapply(fitdistrs, function(x) return(1/x[["estimate"]][["size"]])))
+      description$fitdistr.alpha = alpha
+      description$fitdistr.alpha_diploid = alpha_diploid
+      description$fitdistr.alpha_filter = alpha_lim
       Biobase::pData(scaledsegmentedCN) = description
   }
   

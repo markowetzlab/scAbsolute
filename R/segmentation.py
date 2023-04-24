@@ -172,9 +172,9 @@ def run_hmm(observed_counts, rpc_prior_value, zero_prior, alpha_max_clip, alpha_
   #  bij_alpha_zero = tfb.Chain([tfb.Shift(shift=epsilon), tfb.Softplus(hinge_softness=epsilon)])
   #  bij_alpha = tfb.Chain([tfb.Shift(shift=epsilon), tfb.Softplus(hinge_softness=epsilon)])
 
-  trainable_rpc_zero = tf.Variable(zero_prior, name="zero", dtype=tf.float32,
+  trainable_rpc_zero = tf.Variable(0.05 * rpc_prior_value, name="zero", dtype=tf.float32,
                               constraint=lambda x: \
-                                   tf.clip_by_value(x, clip_value_min=epsilon, clip_value_max=0.5))
+                                   tf.clip_by_value(x, clip_value_min=epsilon, clip_value_max=0.20 * rpc_prior_value))
   trainable_alpha_zero = tf.Variable(np.log(alpha_zero_prior_value), name="alpha_zero", dtype=tf.float32)
   #  trainable_alpha_zero = tf.Variable(alpha_zero_prior_value, name="alpha_zero", dtype=tf.float32,
                               #  constraint=lambda x: \
@@ -593,13 +593,23 @@ def interface_compute_pvalues(data, name, hmm_path, h0, h1, start, end, n_sample
     if (int(end[index]) - int(start[index])) > len_cutoff:
       pval = 1.0 / (n_samples+1)
     else:
-      pval = q.compute_pvalues(tf.constant(data, dtype=tf.float32),
-                             tf.constant(int(h0[index]), dtype=tf.int32),
-                             tf.constant(int(h1[index]), dtype=tf.int32),
-                             tf.constant(int(start[index]), dtype=tf.int32),
-                             tf.constant(int(end[index]), dtype=tf.int32),
-                             tf.constant(n_samples, dtype=tf.int32))
-      pval = pval.numpy()
+
+      # special case: all x are 0
+      if not np.any(data[start[index]:end[index]]):
+        if h0[index] == 0:
+          #pvalue = 1
+          pval = 1.0 - 1e-16
+        else:
+          #pvalue = 0
+          pval = 0.0 + 1e-16
+      else:
+        pval = q.compute_pvalues(tf.constant(data, dtype=tf.float32),
+                               tf.constant(int(h0[index]), dtype=tf.int32),
+                               tf.constant(int(h1[index]), dtype=tf.int32),
+                               tf.constant(int(start[index]), dtype=tf.int32),
+                               tf.constant(int(end[index]), dtype=tf.int32),
+                               tf.constant(n_samples, dtype=tf.int32))
+        pval = pval.numpy()
 
     pvalues.append(pval)
 
@@ -817,3 +827,20 @@ def test_inference_realworld():
 
 ## uncomment top one too
 ##  print(datetime.now() - startTime)
+
+## debug bug in pvalue for 0 input
+#  path = "/home/schnei01/Data/project1/30-scale/500/scaling/UID-NNA-MDAMB231c8/SLX-NAVINACT/UID-NNA-MDAMB231c8_SLX-NAVINACT_000877_MDAMB231C8PLATE1C371-S2291-SRR13909522/UID-NNA-MDAMB231c8_SLX-NAVINACT_000877_MDAMB231C8PLATE1C371-S2291-SRR13909522.Y.hmm"
+#  q = tf.saved_model.load(path)
+#  print(q.get_name)
+#  name = q.get_name()
+#  print(type(name))
+#  start = [1]
+#  end = [2]
+#  h1 = [0]
+#  h0 = [1]
+#
+#  data = np.array([0] * 23)
+#  print(data.shape)
+#  pvals = interface_compute_pvalues(data[tf.newaxis,:], name, path,
+        #  h0, h1, start, end, n_samples=1000)
+#  print(pvals)

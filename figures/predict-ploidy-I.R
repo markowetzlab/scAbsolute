@@ -16,6 +16,7 @@ library(ggbeeswarm, quietly=TRUE, warn.conflicts = FALSE)
 library(rtracklayer, quietly=TRUE, warn.conflicts = FALSE)
 library(phylogram, quietly=TRUE, warn.conflicts = FALSE)
 library(dendextend, quietly=TRUE, warn.conflicts = FALSE)
+library(grid, quietly=TRUE, warn.conflicts = FALSE)
 source("~/scUnique/R/visualize.R")
 source("~/scAbsolute/R/core.R")
 source("~/scAbsolute/R/visualization.R")
@@ -36,7 +37,7 @@ files = c(
            "UID-DLP-SA1087",
            #"UID-DLP-SA1088",
            #"UID-DLP-SA1089",
-           #"UID-DLP-SA1090",
+           "UID-DLP-SA1090",
            #"UID-DLP-SA921",
            "UID-DLP-SA922",
            #"UID-DLP-SA1101",
@@ -50,13 +51,13 @@ files = c(
            "UID-10X-BREAST-E",
            "UID-10X-Andor-2020-48959-MKN-45",
            "UID-10X-Andor-2020-49599-SNU-16", 
-           "UID-10X-Andor-2020-49600-SNU-668", 
+           #"UID-10X-Andor-2020-49600-SNU-668", 
            "UID-10X-Andor-2020-49606-NCI-N87", 
-           "UID-10X-Andor-2020-50941-SNU-638", 
+           #"UID-10X-Andor-2020-50941-SNU-638", 
            "UID-10X-Andor-2020-59068-KATOIII", 
            "UID-10X-Andor-2020-49607-HGC-27",
            "UID-10X-Andor-2020-59065-NUGC-4",
-           "UID-10X-Andor-2020-59069-SNU-601",
+           #"UID-10X-Andor-2020-59069-SNU-601",
            "UID-NNA-BT20", 
            "UID-NNA-mb157", 
            "UID-NNA-mb453",
@@ -68,19 +69,12 @@ files = c(
            "UID-NNA-TN5",
            "UID-NNA-TN6",
            "UID-NNA-TN7",
-           #"UID-NNA-TN6-paired",
-           #"UID-NNA-TN7-paired",
            "UID-NNA-TN8"
-#           "UID-JBL-NA12878",
-#           "UID-JBL-CIOV1",
-#           "UID-JBL-PEO1",
-#           "UID-JBL-OVCAR3"
          ), "_", binSizeValue, ".rds")))
 pd = dplyr::bind_rows(lapply(files, 
                              function(x) Biobase::pData(readRDS(x)) )) %>%
   tidyr::separate(name, sep="_", into=c("UID2", "SLX", "cellid", "celltag"), remove=FALSE) %>%
-  dplyr::mutate(UID = str_replace(UID2, "-D11-1-B4", "")) %>%
-  dplyr::mutate(cycling_activity = cellcycle.kendall.repTime.weighted.median.cor.corrected)
+  dplyr::mutate(UID = str_replace(UID2, "-D11-1-B4", ""))
 
 # load cellcycle info
 df_cellcycle_DLP = readr::read_csv("~/mean-variance-model/data/shahlab/cellcycle-info-DLP.all.csv", col_types = "cccccd")  %>% dplyr::select(UID, SLX, filename, cellcycle, quality)
@@ -160,15 +154,16 @@ df1 = pd %>% dplyr::filter(SLX=="SLX-00000" | SLX %in% c("SLX-18430","SLX-18431"
                                      "UID-10X-Fibroblast-cell" = "UID-10X-Fibroblast"))
 
 # load full data
-CN = combineQDNASets(lapply(files,function(x) readRDS(x)))
+CN = combineQDNASets(lapply(files, function(x){
+  return(selectChromosomes(readRDS(x), exclude=c("X", "Y")))}), dropProtocol=TRUE, reduceMetadata=TRUE)
 valid_cells = colnames(CN)[colnames(CN) %in% df1$name]
 pf = Biobase::protocolData(CN)@data %>% dplyr::filter(name %in% valid_cells)
 
 
 
 ## Analyse full data
-colnames(pf) = paste0("pos.", colnames(pf))
-pf1 = dplyr::inner_join(df1, pf, by=c("name"="pos.name"))
+#colnames(pf) = paste0("pos.", colnames(pf))
+#pf1 = dplyr::inner_join(df1, pf, by=c("name"="pos.name"))
 
 read_depth_table = df1 %>% dplyr::group_by(UID, SLX) %>% dplyr::summarise(median_rpc = median(rpc)) %>%
   dplyr::filter(median_rpc < 25)
@@ -188,7 +183,7 @@ q1a = ggplot(data = predict_replicating(df_ploidy2, cutoff_value = 2)) +
   theme_pubclean()
 q1b = ggplot(data = predict_replicating(df1 %>% dplyr::filter(startsWith(UID, "UID-10X")), cutoff_value = 2)) +
   geom_quasirandom(aes(x=UID2, y=cycling_activity, color=replicating)) +
-  geom_point(aes(x=UID2, y=cycling_mode), size=1.0, color="black") + 
+  geom_point(aes(x=UID2, y=cycling_median), size=1.0, color="black") + 
   theme_pubclean()
 q1 = ggpubr::ggarrange(q1a, q1b)
 q1
@@ -225,7 +220,7 @@ q2 = ggplot(data = df_ploidy2 %>% dplyr::filter(technology %in% c("10X", "ACT"))
 q2
 # no error removal
 #df_ploidy = qc_gini_norm(qc_error(predict_replicating(df_ploidy2, cutoff_value = 2.0))) %>% dplyr::filter(!replicating, !error.outlier, !dgini.outlier)
-df_ploidy = predict_replicating(df_ploidy2, cutoff_value = 2.0) %>% dplyr::filter(!replicating)
+df_ploidy = predict_replicating(df_ploidy2, cutoff_value = 1.5) %>% dplyr::filter(!replicating)
 #df_ploidy_cleaned = qc_error(qc_mapd(qc_gini(qc_gini_norm(df_ploidy)))) %>%
 #        dplyr::filter(!error.outlier, !dgini.outlier, !dmapd.outlier, !gini.outlier)
 
@@ -285,18 +280,18 @@ p_ploidy_prediction
 #        dplyr::filter(!error.outlier, !dgini.outlier, !dmapd.outlier, !gini.outlier)) +
 #  geom_point(aes(x=rpc, y=ploidy))
 
-table(df_ploidy %>% dplyr::filter(rpc > 25) %>% dplyr::filter(startsWith(UID, "UID-DLP-SA906") | startsWith(UID, "UID-DLP-SA039")) %>% dplyr::pull(UID))
-p_ploidy_prediction_p53 = ggplot(data = df_ploidy %>% dplyr::filter(rpc > 25) %>% dplyr::filter(startsWith(UID, "UID-DLP-SA906") | startsWith(UID, "UID-DLP-SA039"))) +
-  geom_quasirandom(aes(x=SLX, y = ploidy, color=technology, shape=ploidy.outlier)) +
-  geom_boxplot(aes(x=SLX, y=ploidy), color="black", outlier.shape = NA, alpha=0.2 ) +
-  facet_wrap(~ UID2, scales = "free_x", strip.position="bottom", nrow=1) +
-  scale_y_continuous(breaks = c(1, 2, 3, 4, 5, 6, 7, 8)) +
-  theme_pubclean() + theme(legend.position="none") + xlab("cell line") + ylab("ploidy") +
-  theme(#axis.text.x = element_text(angle = 45, vjust = 0.0, hjust=0.0),
-        strip.background = element_rect(colour="white", fill="white"),
-        strip.placement = "outside") +
-  theme(axis.text.x = element_text(angle = 90))
-p_ploidy_prediction_p53
+#table(df_ploidy %>% dplyr::filter(rpc > 25) %>% dplyr::filter(startsWith(UID, "UID-DLP-SA906") | startsWith(UID, "UID-DLP-SA039")) %>% dplyr::pull(UID))
+#p_ploidy_prediction_p53 = ggplot(data = df_ploidy %>% dplyr::filter(rpc > 25) %>% dplyr::filter(startsWith(UID, "UID-DLP-SA906") | startsWith(UID, "UID-DLP-SA039"))) +
+#  geom_quasirandom(aes(x=SLX, y = ploidy, color=technology, shape=ploidy.outlier)) +
+#  geom_boxplot(aes(x=SLX, y=ploidy), color="black", outlier.shape = NA, alpha=0.2 ) +
+#  facet_wrap(~ UID2, scales = "free_x", strip.position="bottom", nrow=1) +
+#  scale_y_continuous(breaks = c(1, 2, 3, 4, 5, 6, 7, 8)) +
+#  theme_pubclean() + theme(legend.position="none") + xlab("cell line") + ylab("ploidy") +
+#  theme(#axis.text.x = element_text(angle = 45, vjust = 0.0, hjust=0.0),
+#        strip.background = element_rect(colour="white", fill="white"),
+#        strip.placement = "outside") +
+#  theme(axis.text.x = element_text(angle = 90))
+#p_ploidy_prediction_p53
 
 outlier_SA928 = df_ploidy %>% dplyr::filter(UID == "UID-DLP-SA928", ploidy.outlier) %>% dplyr::pull(name)
 p_outlier_SA928 = plotCopynumberHeatmap(CN[, outlier_SA928], cluster_rows = "ploidy")
@@ -487,7 +482,7 @@ ginkgo_df = dplyr::bind_rows(ginkgo_d1, ginkgo_d2, ginkgo_d3, ginkgo_d4, ginkgo_
 
 
 # CHISEL
-CHISEL_PATH="~/Data/project1/CHISEL/ACT/IMPUTE/"
+CHISEL_PATH="~/Data/project1/CHISEL/NONORMAL/"
 # note: impute data have slightly better performance overall than just phasing, so we use those
 # note: we add pseudolables to the cells, we do not care about individual cells
 chisel_d1 = readr::read_tsv(file = paste0(CHISEL_PATH, "UID-NNA-TN1/calls/calls.tsv")) %>%
@@ -546,11 +541,39 @@ chisel_d8 = readr::read_tsv(file = paste0(CHISEL_PATH, "UID-NNA-TN8/calls/calls.
   dplyr::summarise(chisel=stats::weighted.mean(total_copynumber, size))
 chisel_d8$cell_id = gsub("\\.", "-", ginkgo_d12$cell_id[1:nrow(chisel_d8)])
   
+chisel_d9 = readr::read_tsv(file = paste0(CHISEL_PATH, "UID-NNA-BT20/calls/calls.tsv")) %>%
+  dplyr::rename("CHR"="#CHR") %>% 
+  tidyr::separate(col="CORRECTED_HAP_CN", into=c("cn_A", "cn_B"), sep="\\|", convert=TRUE, remove=FALSE) %>%
+  dplyr::mutate(sample="BT20", total_copynumber = cn_A + cn_B, size=END-START, algorithm="CHISEL") %>% dplyr::group_by(CELL, sample, algorithm) %>%
+  dplyr::summarise(chisel=stats::weighted.mean(total_copynumber, size))
+chisel_d9$cell_id = gsub("\\.", "-", ginkgo_d1$cell_id[1:nrow(chisel_d9)])
 
-chisel_df = dplyr::bind_rows(chisel_d1, chisel_d2, chisel_d3, chisel_d4,chisel_d5, chisel_d6, chisel_d7, chisel_d8)
+chisel_d10 = readr::read_tsv(file = paste0(CHISEL_PATH, "UID-NNA-mb157/calls/calls.tsv")) %>%
+  dplyr::rename("CHR"="#CHR") %>% 
+  tidyr::separate(col="CORRECTED_HAP_CN", into=c("cn_A", "cn_B"), sep="\\|", convert=TRUE, remove=FALSE) %>%
+  dplyr::mutate(sample="mb157", total_copynumber = cn_A + cn_B, size=END-START, algorithm="CHISEL") %>% dplyr::group_by(CELL, sample, algorithm) %>%
+  dplyr::summarise(chisel=stats::weighted.mean(total_copynumber, size))
+chisel_d10$cell_id = gsub("\\.", "-", ginkgo_d2$cell_id[1:nrow(chisel_d10)])
+
+chisel_d11 = readr::read_tsv(file = paste0(CHISEL_PATH, "UID-NNA-MDAMB231c28/calls/calls.tsv")) %>%
+  dplyr::rename("CHR"="#CHR") %>% 
+  tidyr::separate(col="CORRECTED_HAP_CN", into=c("cn_A", "cn_B"), sep="\\|", convert=TRUE, remove=FALSE) %>%
+  dplyr::mutate(sample="mb231", total_copynumber = cn_A + cn_B, size=END-START, algorithm="CHISEL") %>% dplyr::group_by(CELL, sample, algorithm) %>%
+  dplyr::summarise(chisel=stats::weighted.mean(total_copynumber, size))
+chisel_d11$cell_id = gsub("\\.", "-", ginkgo_d3$cell_id[1:nrow(chisel_d11)])
+
+chisel_d12 = readr::read_tsv(file = paste0(CHISEL_PATH, "UID-NNA-mb453/calls/calls.tsv")) %>%
+  dplyr::rename("CHR"="#CHR") %>% 
+  tidyr::separate(col="CORRECTED_HAP_CN", into=c("cn_A", "cn_B"), sep="\\|", convert=TRUE, remove=FALSE) %>%
+  dplyr::mutate(sample="mb453", total_copynumber = cn_A + cn_B, size=END-START, algorithm="CHISEL") %>% dplyr::group_by(CELL, sample, algorithm) %>%
+  dplyr::summarise(chisel=stats::weighted.mean(total_copynumber, size))
+chisel_d12$cell_id = gsub("\\.", "-", ginkgo_d4$cell_id[1:nrow(chisel_d12)])
+
+chisel_df = dplyr::bind_rows(chisel_d1, chisel_d2, chisel_d3, chisel_d4,chisel_d5, chisel_d6, chisel_d7, chisel_d8,
+                             chisel_d9, chisel_d10, chisel_d11, chisel_d12)
 
 ## Compare HMMCopy with scAbsolute calls
-compare_algorithms = dplyr::left_join(dplyr::inner_join(dplyr::inner_join(dplyr::select(df1 %>% #dplyr::select(predict_replicating(df1) %>% dplyr::filter(!replicating)
+compare_algorithms = dplyr::left_join(dplyr::inner_join(dplyr::inner_join(dplyr::select(df1 %>% #predict_replicating(df1) %>% dplyr::filter(!replicating) %>%
                             dplyr::mutate(algorithm="scAbsolute", scAbsolute=ploidy), name, scAbsolute, UID2, SLX, technology, used.reads),
                             hmmcopy_df, by=c("name"="cell_id")), ginkgo_df, by=c("name"="cell_id")), chisel_df, by=c("name"="cell_id")) %>% 
   tidyr::pivot_longer(c("hmmcopy", "scAbsolute", "ginkgo", "chisel"), names_to="method", values_to="ploidy") %>%
@@ -623,6 +646,8 @@ results = stats_table %>% dplyr::group_by(UID3, method) %>% dplyr::summarise(n=n
 print(results, n=100)
 prop.table(tb, c(3,2))
 
+#results %>% dplyr::filter(method == "hmmcopy")
+
 
 ## double check TN5
 #table(stats_table %>% dplyr::filter(UID3 == "TN5") %>% dplyr::filter(ploidy > 3) %>% dplyr::pull(method))
@@ -660,7 +685,7 @@ levels(dat$method2)
 
 
 Fig_ploidy_I_a = ggplot(data = dat %>% dplyr::filter(technology %in% c("10X", "DLP"))) +
-  geom_point(aes(x=1, y=NA, color=factor(method, levels=c("exp", "hmmcopy", "scAbsolute", "ginkgo"))), size=0) +
+  geom_point(aes(x=1, y=NA, color=factor(method, levels=c("exp", "hmmcopy", "scAbsolute", "ginkgo", "chisel"))), size=0) +
   geom_quasirandom(aes(y=base::interaction(UID2, method), color=method, x=ploidy), alpha=1.0, size=1.0, groupOnX = FALSE) +
   geom_tile(data=ploidy_table %>% dplyr::filter(technology=="10X") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=0.8),alpha=0.5,fill="grey") +
   geom_tile(data=ploidy_table %>% dplyr::filter(technology=="DLP") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=0.8),alpha=0.0,fill="white") +
@@ -681,7 +706,7 @@ Fig_ploidy_I_a = ggplot(data = dat %>% dplyr::filter(technology %in% c("10X", "D
         legend.box.just = "right",
         legend.margin = margin(c(5, 0, 5, 0)),
         legend.text = element_text(margin = margin(r = 10, unit = "pt")),
-        legend.position = "top",
+        legend.position = "none",
         legend.title = element_text(#family = "Playfair",
                                     #color = "chocolate",
                                     size = 14, face = 2)) +
@@ -706,10 +731,10 @@ Fig_ploidy_I_b = ggplot(data = dat %>% dplyr::filter(technology %in% c("ACT - ce
   geom_point(aes(x=1, y=NA, color=factor(method, levels=c("exp", "hmmcopy", "scAbsolute", "ginkgo", "chisel"))), size=0) +
   geom_quasirandom(aes(y=base::interaction(UID2, method), color=method, x=ploidy), alpha=1.0, size=1.0, groupOnX = FALSE) +
   #geom_tile(data=ploidy_table %>% dplyr::filter(technology=="10X") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=0.8),alpha=0.5,fill="grey") +
-  geom_tile(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=2.4),alpha=0.5,fill="grey", position=position_nudge(x=0,y=-1.0)) +
-  geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy), size=2, shape=3, color="red", position=position_nudge(x=0,y=-1.0)) +
-  geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*0.5), size=2, shape=8, color="blue", position=position_nudge(x=0,y=-1.0)) +
-  geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*2.0), size=2, shape=8, color="blue", position=position_nudge(x=0,y=-1.0)) +
+  geom_tile(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=3.6),alpha=0.5,fill="grey", position=position_nudge(x=0,y=-1.5)) +
+  geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy), size=2, shape=3, color="red", position=position_nudge(x=0,y=-1.5)) +
+  geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*0.5), size=2, shape=8, color="blue", position=position_nudge(x=0,y=-1.5)) +
+  geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*2.0), size=2, shape=8, color="blue", position=position_nudge(x=0,y=-1.5)) +
   geom_tile(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "tumours")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=3.6),alpha=0.5,fill="grey", position=position_nudge(x=0,y=-1.5)) +
   geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "tumours")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy), size=2, shape=3, color="red", position=position_nudge(x=0,y=-1.5)) +
   geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "tumours")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*0.5), size=2, shape=8, color="blue", position=position_nudge(x=0,y=-1.5)) +
@@ -745,9 +770,11 @@ Fig_ploidy_I_b
 
 # todo combine top and bottom figure for different size scales
 
-Fig_ploidy_I = ggpubr::ggarrange(Fig_ploidy_I_a + rremove("xlab") + rremove("ylab"),
+leg = get_legend(Fig_ploidy_I_b)
+Fig_ploidy_I = ggpubr::ggarrange(leg, 
+                                 Fig_ploidy_I_a + rremove("xlab") + rremove("ylab"),
                                  Fig_ploidy_I_b + rremove("ylab") + theme(legend.position = "none"),
-                                 nrow=2, labels=c("", ""), heights = c(3, 5))
+                                 nrow=3, labels=c("", "", ""), heights = c(1, 3, 5))
 Fig_ploidy_I = annotate_figure(Fig_ploidy_I, left = textGrob("sample", rot = 90, vjust = 0.5, gp = gpar(cex = 1.5)))
 Fig_ploidy_I
 
@@ -886,12 +913,12 @@ ggplot(data=df_sup_CHISEL_joined) +
 gc_correction = TRUE
 # look into some of the outliers (false ploidy outliers)
 set.seed(2022)
-examples = df_sup_CHISEL_joined %>% dplyr::filter(!(name %in% breast_replicating), ploidy.scAbsolute < 2.30, ploidy.scAbsolute > 1.70, ploidy.chisel > 2.5, ploidy.chisel < 6) %>%
+examples = df_sup_CHISEL_joined %>% dplyr::filter(!(name %in% breast_replicating), ploidy.scAbsolute < 2.30, ploidy.scAbsolute > 1.70, ploidy.chisel > 3.0, ploidy.chisel < 6) %>%
  dplyr::ungroup() %>% dplyr::slice_sample(n=12) %>% dplyr::mutate(fulltag=paste0(name, "-1")) %>% dplyr::select(fulltag, sample)
 examples1 = dplyr::inner_join(examples, df1, by=c("fulltag"="celltag", "sample"="UID")) %>%
   dplyr::mutate(shorttag = gsub("-1", "", fulltag)) %>%
-  dplyr::select(name, ploidy, fulltag, shorttag, sample)
-names1 = examples1 %>% dplyr::pull(name)
+  dplyr::select(name, ploidy, fulltag, shorttag, sample, rpc)
+names1 = examples1 %>% dplyr::filter(rpc > 25) %>% dplyr::pull(name)
 
 # helper function to plot chisel calls on top of other data
 addCHISEL_segmentation <- function(CN1, name){
@@ -929,15 +956,15 @@ addCHISEL_segmentation <- function(CN1, name){
 test = addCHISEL_segmentation(CNB, names1[[1]])
 
 chromosome_break_label = c("1", "", "3", "", "5", "", "7", "", "9", "", "11", "", "", "", "15", "", "", "", "19", "", "", "", "", "")
-pe1 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[1]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe1 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[1]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe2 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[2]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe3 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[3]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe4 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[4]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe5 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[5]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe6 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[6]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe7 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[7]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe8 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[8]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pe1 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[1]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pe1 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[1]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pe2 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[2]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pe3 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[3]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pe4 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[4]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pe5 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[5]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pe6 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[6]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pe7 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[7]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pe8 = plotCopynumber(addCHISEL_segmentation(CNB, names1[[8]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
 
 #pe9 = plotCopynumber(CN[, names[[9]]], addSegmentation = FALSE, addCopynumber = TRUE, ylim = c(0, 8), copyColor = "orange", alphaLevel = 0.3, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = TRUE) + coord_cartesian(ylim=c(0, 8), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
 #pe10 = plotCopynumber(CN[, names[[10]]], addSegmentation = FALSE, addCopynumber = TRUE, ylim = c(0, 8), copyColor = "orange", alphaLevel = 0.3, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = TRUE) + coord_cartesian(ylim=c(0, 8), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
@@ -957,22 +984,22 @@ joint_sup_1 = ggpubr::ggarrange(pe1 + rremove('xlab')+rremove("x.text")+rremove(
 joint_sup_1
 
 set.seed(2022)
-examples = df_sup_CHISEL_joined %>% dplyr::filter(!(name %in% breast_replicating), ploidy.chisel < 2.30, ploidy.chisel > 1.70, ploidy.scAbsolute > 2.5) %>%
- dplyr::ungroup() %>% dplyr::slice_sample(n=8) %>% dplyr::mutate(fulltag=paste0(name, "-1")) %>% dplyr::select(fulltag, sample)
+examples = df_sup_CHISEL_joined %>% dplyr::filter(!(name %in% breast_replicating), ploidy.chisel < 2.30, ploidy.chisel > 1.70, ploidy.scAbsolute > 3.0, ploidy.scAbsolute < 6.0) %>%
+ dplyr::ungroup() %>% dplyr::slice_sample(n=12) %>% dplyr::mutate(fulltag=paste0(name, "-1")) %>% dplyr::select(fulltag, sample)
 examples2 = dplyr::inner_join(examples, pdB, by=c("fulltag"="celltag", "sample"="UID")) %>%
-  dplyr::select(name, ploidy, fulltag, sample)
-names2 = examples2 %>% dplyr::pull(name)
+  dplyr::select(name, ploidy, fulltag, sample, rpc)
+names2 = examples2 %>% dplyr::filter(rpc > 25) %>% dplyr::pull(name)
 
 test = CNB[, names2[[1]]]
-pe1 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[1]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe2 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[2]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe3 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[3]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe4 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[4]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pee1 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[1]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pee2 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[2]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pee3 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[3]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pee4 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[4]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
 
-pe5 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[5]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe6 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[6]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe7 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[7]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
-pe8 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[8]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pee5 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[5]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pee6 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[6]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pee7 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[7]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
+pee8 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[8]]), addSegmentation = TRUE, addCopynumber = TRUE, ylim = c(0, 7), copyColor = "orange", segmentationColor="blue", alphaLevel = 0.5, alphaLevelSeg=0.1,  showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = gc_correction, chromosome_break_label = chromosome_break_label) + coord_cartesian(ylim=c(0, 7), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
 
 #pe9 = plotCopynumber(CN[, names[[9]]], addSegmentation = FALSE, addCopynumber = TRUE, ylim = c(0, 8), copyColor = "orange", alphaLevel = 0.3, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = TRUE) + coord_cartesian(ylim=c(0, 8), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
 #pe10 = plotCopynumber(CN[, names[[10]]], addSegmentation = FALSE, addCopynumber = TRUE, ylim = c(0, 8), copyColor = "orange", alphaLevel = 0.3, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = TRUE) + coord_cartesian(ylim=c(0, 8), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
@@ -980,15 +1007,15 @@ pe8 = plotCopynumber(addCHISEL_segmentation(CNB, names2[[8]]), addSegmentation =
 #pe12 = plotCopynumber(CN[, names[[12]]], addSegmentation = FALSE, addCopynumber = TRUE, ylim = c(0, 8), copyColor = "orange", alphaLevel = 0.3, showUnique = FALSE,showMarker = FALSE, main="",readinfo = FALSE, uniqueColor="orange", correction = TRUE) + coord_cartesian(ylim=c(0, 8), clip="off") +  theme_pubclean(base_size=20) +  theme(plot.margin = margin(1.0, 0, 0, 0, "cm"))
 
 
-joint_sup_2 = ggpubr::ggarrange(pe1 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
-                              pe2 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
-                              pe3 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
-                              pe4 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
-                              pe5 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
-                              pe6 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
-                              pe7 +rremove("ylab"),
-                              pe8 +rremove("ylab"),
-                              nrow=4, ncol=2)
+joint_sup_2 = ggpubr::ggarrange(pee1 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
+                              pee2 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
+                              pee3 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
+                              pee4 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
+                              pee5 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
+                              pee6 + rremove('xlab')+rremove("x.text")+rremove("ylab") + theme(axis.ticks.x=element_blank()),
+                              pee7 +rremove("ylab"),
+                              pee8 +rremove("ylab"),
+                              nrow=4, ncol=2, heights = c(1,1,1,1.5,1,1,1,1.5))
 joint_sup_2
 
 
@@ -1002,7 +1029,10 @@ sup_chisel_overview = ggplot(data=df_sup_CHISEL_joined %>% dplyr::filter(!(name 
   geom_point(aes(x=ploidy.chisel, y=ploidy.scAbsolute, color=UIDX), size=0.8, alpha=0.6) +
   geom_point(data = dplyr::inner_join(df_sup_CHISEL_joined %>% dplyr::mutate(name=paste0(name, "-1")), dplyr::bind_rows(examples1, examples2),
                                       by=c("name"="fulltag", "sample"="sample")),
-             aes(x=ploidy.chisel, y=ploidy.scAbsolute), color="black", size=3.0, shape=1, alpha=1.0) +
+             aes(x=ploidy.chisel, y=ploidy.scAbsolute), color="black", size=3.0, shape=1, alpha=1.0, position="jitter") +
+  #geom_point(data = dplyr::inner_join(df_sup_CHISEL_joined %>% dplyr::mutate(name=paste0(name, "-1")), dplyr::bind_rows(examples2),
+  #                                    by=c("name"="fulltag", "sample"="sample")),
+  #           aes(x=ploidy.chisel, y=ploidy.scAbsolute), color="blue", size=3.0, shape=1, alpha=1.0, position="jitter") +
   xlim(1,8) + ylim(1,8) +
   geom_density2d(aes(x=ploidy.chisel, y=ploidy.scAbsolute), color="black", alpha=0.3) +
   xlab("Ploidy estimate - CHISEL") + ylab("Ploidy estimate - scAbsolute") +
@@ -1027,12 +1057,13 @@ ggpubr::ggexport(sup_chisel_overview, filename="~/scAbsolute/figures/Sup_chisel_
 ggpubr::ggexport(joint_sup_1_f, filename="~/scAbsolute/figures/Sup_chisel_examples_1.pdf", width=6, height=9)
 
 
-# ploidy.chisel < 2.05, ploidy.chisel > 1.95, ploidy.scAbsolute > 2.5) %>%
+# ploidy.chisel < 2.05, ploidy.chisel > 1.95, ploidy.scAbsolute > 2.5, ploidy.scAbsolute < 6 %>%
 ggpubr::ggexport(joint_sup_2_f, filename="~/scAbsolute/figures/Sup_chisel_examples_2.pdf", width=6, height=9)
 
 
 section_E = predict_replicating(pdB%>% dplyr::filter(UID == "UID-10X-BREAST-E")) %>%
-  dplyr::filter(!(name %in% breast_replicating)) %>% dplyr::pull(name)
+  dplyr::filter(!replicating) %>% dplyr::pull(name)
+  #dplyr::filter(!(name %in% breast_replicating)) %>% dplyr::pull(name)
 p_heatmap_E = plotCopynumberHeatmap(CNB[, section_E], cluster_rows = "ploidy", show_cell_names = FALSE)
 p_heatmap_E
 ggpubr::ggexport(p_heatmap_E, filename="~/scAbsolute/figures/Sup_chisel_sectionE.pdf")
@@ -1051,7 +1082,7 @@ prop.table(table(df_ploidy$ploidy.outlier, df_ploidy$UID2),margin = 2)
 
 #ggpubr::ggexport(p_sup_heatmap_SA1135, filename = "~/scAbsolute/figures/Sup_ploidy_profiles_SA1135.pdf", width=16, height=8)
 
-df_select_TN4 = df_predict %>% dplyr::filter(UID == "UID-NNA-TN4") %>% dplyr::select(name, ploidy) %>% dplyr::mutate(pout = ploidy < 2.5) %>%
+df_select_TN4 = df_ploidy2 %>% dplyr::filter(UID == "UID-NNA-TN4") %>% dplyr::select(name, ploidy) %>% dplyr::mutate(pout = ploidy < 2.5) %>%
   dplyr::arrange(desc(ploidy))
 Sup_ploidy_TN4 = plotCopynumberHeatmap(CN[, df_select_TN4$name], row_split = as.factor(df_select_TN4$pout))
 Sup_ploidy_TN4
@@ -1059,7 +1090,7 @@ Sup_ploidy_TN4
 ggpubr::ggexport(Sup_ploidy_TN4, filename = "~/scAbsolute/figures/Sup_ploidy_TN4.pdf", width=12, height=16)
 
 # predict ploidy for cycling cells
-df_ploidy_replicating = predict_replicating(df_ploidy2, cutoff_value = 2.0) %>% dplyr::filter(replicating)
+df_ploidy_replicating = predict_replicating(df_ploidy2, cutoff_value = 1.5) %>% dplyr::filter(replicating)
 
 df_ploidy_replicating = qc_ploidy(df_ploidy_replicating, range=0.5)
 prop.table(table(df_ploidy_replicating$ploidy.outlier, df_ploidy_replicating$technology),margin = 2)
@@ -1082,7 +1113,7 @@ Sup_ploidy_prediction_replicating
 
 ggpubr::ggexport(Sup_ploidy_prediction_replicating, filename = "~/scAbsolute/figures/Sup_ploidy_prediction_replicating.pdf", width=12, height=16)
 
-ggpubr::ggexport(p_predict_nice_woS, filename = "~/scAbsolute/figures/Sup_ploidy_prediction_no_replicating.pdf", width=12, height=16)
+#ggpubr::ggexport(p_predict_nice_woS, filename = "~/scAbsolute/figures/Sup_ploidy_prediction_no_replicating.pdf", width=12, height=16)
 
 
 subset_ploidy_replicating_conserved = predict_replicating(df1) %>% dplyr::filter(UID == "UID-DLP-SA1044", cellcycle %in% c("G1", "S")) %>%

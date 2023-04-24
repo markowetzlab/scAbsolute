@@ -39,8 +39,9 @@ files = c(
 pd = dplyr::bind_rows(lapply(files, 
                              function(x) Biobase::pData(readRDS(x)) )) %>%
   tidyr::separate(name, sep="_", into=c("UID2", "SLX", "cellid", "celltag"), remove=FALSE) %>%
-  dplyr::mutate(UID = str_replace(UID2, "-D11-1-B4", "")) %>%
-  dplyr::mutate(cycling_activity = cellcycle.kendall.repTime.weighted.median.cor.corrected)
+  dplyr::mutate(UID = str_replace(UID2, "-D11-1-B4", ""))
+  #dplyr::mutate(cycling_activity = cellcycle.cmi_yrT)
+  # NOTE updated
 
 # load cellcycle info
 df_cellcycle_DLP = readr::read_csv("~/mean-variance-model/data/shahlab/cellcycle-info-DLP.all.csv", col_types = "cccccd")  %>% dplyr::select(UID, SLX, filename, cellcycle, quality)
@@ -109,7 +110,15 @@ pf1 = dplyr::inner_join(df1, pf, by=c("name"="pos.name"))
 
 set.seed(2022)
 source("~/scUnique/R/core.R")
-df = predict_replicating(df1, cutoff_value = 2) %>% dplyr::group_by(UID2) %>% dplyr::summarise(n = n(), G1=sum(!replicating), S=sum(replicating), read_depth=median(rpc)) %>%
+# large ploidy are probably wrong predicted
+df = predict_replicating(df1,
+     #dplyr::mutate(SLX = case_when(UID == "UID-10X-Andor-49599-SNU-16" & ploidy < 2.0 ~ "SLX-00001",
+     #                              UID == "UID-10X-Andor-49599-SNU-16" & ploidy >= 2.0 ~ "SLX-00002",
+     #                              UID == "UID-10X-Andor-2020-59068-KATOIII" & ploidy < 3.0 ~ "SLX-00003",
+     #                              UID == "UID-10X-Andor-2020-59068-KATOIII" & ploidy >= 3.0 ~ "SLX-00004",
+     #                              TRUE ~  as.character(SLX))),
+     cutoff_value = 1.5, iqr_value = 1.5) %>% dplyr::group_by(UID2) %>% dplyr::summarise(n = n(), G1=sum(!replicating), S=sum(replicating), read_depth=median(rpc)) %>%
+#df = df1 %>% dplyr::group_by(UID2) %>% dplyr::summarise(n = n(), G1=sum(!replicating), S=sum(replicating), read_depth=median(rpc)) %>%
 #df = predict_replicating(df1 %>% dplyr::mutate(UID="A", SLX="B"), cutoff_value = 2) %>% dplyr::group_by(UID2) %>% dplyr::summarise(n = n(), G1=sum(!replicating), S=sum(replicating)) %>%
   dplyr::mutate(ratio = S/(G1+S), scRNA_ratio = dplyr::case_when(
     UID2 == "SNU-16" ~ 0.35,
@@ -136,10 +145,30 @@ df = predict_replicating(df1, cutoff_value = 2) %>% dplyr::group_by(UID2) %>% dp
   ))
 df
 
+
+## 
+#ddf1 = predict_replicating(df1, cutoff_value = 1.5, iqr_value = NULL)
+#ddf1$cycling_activity = ddf1$cellcycle.kendall.repTime.weighted.median.cor.corrected
+#ddf2 = predict_replicating(ddf1, cutoff_value = 1.5)
+#ddf = df1
+#ddf$replicating = ddf1$replicating | ddf2$replicating
+#ggplot(data = ddf) + 
+#  geom_point(aes(x=cellcycle.cmi_yrT, y=cellcycle.kendall.repTime.weighted.median.cor.corrected, color=replicating)) +
+#  facet_wrap(~UID2)
+#df1$replicating = ddf$replicating[match(ddf$name, df1$name)]
+
+ggplot(data = predict_replicating(df1, hard_threshold = 0.05, iqr_value = 1.0)) + 
+  geom_quasirandom(aes(x=UID, y=cellcycle.kendall.repTime.weighted.median.cor.corrected, color=replicating)) +
+  theme(axis.text.x = element_text(angle=45))
+
+ggplot(data = predict_replicating(df1)) + 
+  geom_point(aes(x=cellcycle.cmi_yrT, y=cellcycle.kendall.repTime.weighted.median.cor.corrected, color=replicating)) +
+  facet_wrap(~UID)
+
 # SNU-16 and SNU-668 have high passage difference, so are excluded here
 p1 = ggplot(data = df %>% dplyr::filter(!(UID2 %in% c("SNU-668", "SNU-16"))) %>%
               dplyr::mutate(same_suspension = UID2 %in% c("KATOIII", "SNU-601", "SNU-638"))) +
-  geom_point(aes(x=ratio, y=scRNA_ratio, color=same_suspension)) + #, size=read_depth)) + 
+  geom_point(aes(x=ratio, y=scRNA_ratio, color=same_suspension, UID2=UID2)) + #, size=read_depth)) + 
   geom_smooth(aes(x=ratio, y=scRNA_ratio), method='lm', formula= y~x) +
   xlab("% S-phase cells (scDNAseq)") +  ylab("% S-phase cells (scRNAseq)") +
   labs(colour="scDNA & scRNA sequenced from the same suspension") +
@@ -155,7 +184,9 @@ p2 = ggplot(data = df) + geom_point(aes(x=ratio, y=doubling_time)) + #, size=rea
 
 cor.test(df$ratio, df$doubling_time)
 
-x = predict_replicating(df1 %>% dplyr::filter(UID2 == "SNU-668"))
+df2 = predict_replicating(df1)
+prop.table(table(df2$UID2, df2$replicating), margin=1)
+x = predict_replicating(df1 %>% dplyr::filter(UID2 == "SNU-668", cutoff=1.0))
 ggplot(data=x) + geom_quasirandom(aes(x="NA", y=cycling_activity, color=replicating))
 
 #ggplot(data=df1) + geom_quasirandom(aes(x=UID, y=rpc))
@@ -171,11 +202,17 @@ Sup_cellcycle_cellines
 ggpubr::ggexport(Sup_cellcycle_cellines, filename = "~/scAbsolute/figures/Sup_cellcycle_cellines.pdf", width=12, height=8)
 
 
-p3 = ggplot(data=predict_replicating(df1)) +
-  geom_quasirandom(aes(x=UID2, y=cellcycle.kendall.repTime.weighted.median.cor.corrected, color=replicating)) +
+ppl = ggplot(data=predict_replicating(df1,cutoff_value = 1.5)) +
+  geom_histogram(aes(x=ploidy)) + facet_wrap(~UID)
+ppl
+
+p3 = ggplot(data=predict_replicating(df1,cutoff_value = 1.0)) +
+  geom_quasirandom(aes(x=UID2, y=cellcycle.cmi_yrT, color=replicating)) +
   #facet_wrap(~UID, labeller=custom_label_function) + theme_pubclean() + #scale_color_continuous(name="# of CNAs", trans="log") +
   theme_pubclean() +
   theme(legend.direction='vertical', legend.position = "right") + 
+  #geom_hline(aes(x=UID2, yintercept=cycling_cutoff_sd), color="blue") +
+  #geom_hline(aes(x=UID2, yintercept=cycling_median), color="black") +
   ylab("Cycling activity") + xlab("Cell line") + labs(color="Replicating") + 
   theme_pubclean()
   #scale_color_viridis_c(direction = -1, alpha=0.9, limits = c(1, 4000), na.value = 0, guide = guide_legend("title"))

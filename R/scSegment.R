@@ -28,7 +28,6 @@ copynumberSegmentation <- function(countsObject, change_prob=1e-1,
   stopifnot(all(c("alpha", "rpc", "name") %in% colnames(Biobase::pData(countsObject))))
   reticulate::source_python(file.path(BASEDIR, "R/segmentation.py"), convert=TRUE)
   
-  
   valid = binsToUseInternal(countsObject)
   data = Biobase::assayDataElement(countsObject, "calls")[valid,1]
   
@@ -41,6 +40,13 @@ copynumberSegmentation <- function(countsObject, change_prob=1e-1,
   }else{
     covariate_info = rep(1.0, sum(valid))
   }
+  
+  # estimate alpha - use segmentation to estimate copy number state
+  cn_estimate = round(Biobase::assayDataElement(countsObject, "segmented")[,1], digits=0)
+  cn_estimate = ifelse(cn_estimate >= max_states, max_states-1, cn_estimate)
+  countsObject = Biobase::assayDataElementReplace(countsObject, "copynumber", matrix(cn_estimate, ncol=1))
+  alpha_estimate = estimate_overdispersion(countsObject, robust=c(0, max_states-1))
+  ifelse(is.na(alpha_estimate) || is.nan(alpha_estimate), 0.01, alpha_estimate)
   
   if(splitPerChromosome){
     
@@ -73,14 +79,6 @@ copynumberSegmentation <- function(countsObject, change_prob=1e-1,
       hmm_path2 = paste0(out_path, name, "/", name, ".", c, ".hmm")
       marginal_path = paste0(out_path, name, "/", name, ".", c, ".marginals.rds")
       
-      alpha_estimate <- tryCatch(
-              {
-                  alpha_estimate = 1.0 / suppressWarnings(MASS::fitdistr(as.integer(data[chromosome == c]), densfun = "negative binomial")[["estimate"]][["size"]])
-              },
-              error=function(cond) {
-                  return(0.01)
-              }
-      )
       # inference part - for a set of learning rates
       result <- interface_hmm(matrix(data[chromosome == c], ncol = 1), as.double(rpc), as.double(alpha_estimate), matrix(covariate_info[chromosome == c], nrow=1),
                               as.double(change_prob),
@@ -147,15 +145,6 @@ copynumberSegmentation <- function(countsObject, change_prob=1e-1,
     chromosomeIndices = cumsum(rl@lengths)
     chromosomeIndices = chromosomeIndices[1:(length(chromosomeIndices)-1)]
     
-      alpha_estimate <- tryCatch(
-              {
-                  alpha_estimate = 1.0 / suppressWarnings(MASS::fitdistr(as.integer(data), densfun = "negative binomial")[["estimate"]][["size"]])
-              },
-              error=function(cond) {
-                  return(0.01)
-              }
-      )
-
     # inference part - for a set of learning rates
     result <- interface_hmm(matrix(data, ncol = 1), as.double(rpc), as.double(alpha_estimate), matrix(covariate_info, nrow=1),
                             as.double(change_prob),

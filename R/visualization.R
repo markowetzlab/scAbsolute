@@ -242,7 +242,7 @@ plotCopynumber <- function(object, showUnique=TRUE, round=FALSE, correction=FALS
                                                       "11", "", "13", "", "15", "", "17", "", "19", "",
                                                       "21", "", "X", "Y"),
                            main=NULL, copyColor="#E69F00", addSegmentation=FALSE, addCopynumber=TRUE,
-                           showMarker=TRUE, alphaLevel=0.3, uniqueColor="#FFFFFF", segmentationColor="#E69F00", verbose=TRUE){
+                           showMarker=TRUE, alphaLevel=0.3, uniqueColor="#FFFFFF", segmentationColor="#E69F00", alphaLevelSeg=1.0, verbose=TRUE){
 
   require(S4Vectors, warn.conflicts = FALSE)
   require(ggplot2, warn.conflicts = FALSE)
@@ -312,7 +312,7 @@ plotCopynumber <- function(object, showUnique=TRUE, round=FALSE, correction=FALS
   }
 
   ## add read information to plot title
-  if(readinfo){
+  if(is.logical(readinfo) && readinfo){
     if("rpc" %in% colnames(Biobase::pData(object))){
       rpc = base::format(round(Biobase::pData(object)[["rpc"]], digits=1), nsmall=0L, big.mark=",", digits=10)
     }else{
@@ -324,6 +324,13 @@ plotCopynumber <- function(object, showUnique=TRUE, round=FALSE, correction=FALS
       used_reads = "-"
     }
     main = paste0(main, " (", used_reads, " / ", rpc , ")")
+  }
+  if(!is.logical(readinfo) && readinfo == "FULL"){
+    if("name" %in% colnames(Biobase::pData(object))){
+      main = Biobase::pData(object)[["name"]]
+    }else{
+      warning("name missing in metadata")
+    } 
   }
 
   location = rownames(object)
@@ -341,7 +348,7 @@ plotCopynumber <- function(object, showUnique=TRUE, round=FALSE, correction=FALS
   # Look at unique events / events that differ between segmentation and copynumber slot
   unique_index = round(as.numeric(segments), digits=0) != round(as.numeric(copies), digits=0)
   colorUnique = rep(copyColor, times=n_bins)
-  colorUnique[unique_index] = uniqueColor
+  #colorUnique[unique_index] = uniqueColor
   sizeUnique = rep(pointsize, times=n_bins)
   sizeUnique[unique_index] = 10 * pointsize
   
@@ -349,9 +356,14 @@ plotCopynumber <- function(object, showUnique=TRUE, round=FALSE, correction=FALS
   unique_marker = rep(0, sum(valid))
   segment_vector = paste0(as.numeric(segments[valid]), "-", round(as.numeric(segments)[valid], digits=0) != round(as.numeric(copies)[valid], digits=0))
   rle_l = Rle(segment_vector)@lengths
-  unique_marker[cumsum(c(0, rle_l[1:(length(rle_l)-1)])) + floor(rle_l/2)] = 1
-  unique_marker_position = rep(FALSE, n_bins)
-  unique_marker_position[valid][unique_marker == 1 & unique_index[valid]] = TRUE
+  if(length(rle_l) > 1){
+    unique_marker[cumsum(c(0, rle_l[1:(length(rle_l)-1)])) + floor(rle_l/2)] = 1
+    unique_marker_position = rep(FALSE, n_bins)
+    unique_marker_position[valid][unique_marker == 1 & unique_index[valid]] = TRUE
+  }else{
+    unique_marker_position = rep(FALSE, n_bins)
+  }
+  
   
   if(verbose){
     print("Unique items:")
@@ -368,16 +380,16 @@ plotCopynumber <- function(object, showUnique=TRUE, round=FALSE, correction=FALS
     {if(showUnique)scale_colour_manual("KEYS", values = colorUnique)} +
     {if(main!="")ggtitle(main)} +
     geom_point(aes(x=x, y=y2),size=pointsize, alpha=alphaLevel) + ylab(ylab) +
-    {if(addSegmentation)geom_point(aes(x=x, y=y), color=segmentationColor, size=pointsize)} +
+    {if(addSegmentation)geom_point(aes(x=x, y=y), color=segmentationColor, size=pointsize, alpha=alphaLevelSeg)} +
     {if(addCopynumber)geom_point(aes(x=x, y=z), color=colorUnique, size=pointsize)} +
     {if(showMarker)geom_point(data=data.frame(x2=x[unique_marker_position], y2=(ylim[[2]]-1e-6)),
       aes(x=x2, y=y2), shape=25, size=3, fill="#D55E00")} +
-    scale_y_continuous(breaks=ybreaks) + 
+    {if(!(is.logical(ybreaks) && ybreaks==FALSE))scale_y_continuous(breaks=ybreaks)} +
     coord_cartesian(ylim=ylim) +
     theme_cowplot()
 
   if(isSingleChromosome){
-    p = p + scale_x_continuous("chromosome", breaks=NULL, labels=chromosome_break_label, expand=c(0,0))
+    p = p + scale_x_continuous(paste0("chromosome ", chromosome_break_label), breaks=NULL, labels=chromosome_break_label, expand=c(0,0))
   }else{
     p = p + geom_vline(xintercept = chromosome_boundaries, linetype = "dashed", size=0.5, alpha=1.0) +
       scale_x_continuous("chromosome", breaks=chromosome_break_position, labels=chromosome_break_label, expand=c(0,0))

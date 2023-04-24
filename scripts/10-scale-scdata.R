@@ -8,10 +8,9 @@ if (interactive()){
   
   # bamPath = "~/Data/project1/20-align/"
   # bamFile = "UID-10X-Andor-2020-48959-MKN-45_SLX-00000_000365_CTAATGGGTTGATCGT-1.bam"
-  #bamPath = "~/Data/project1/20-align/UID-BUG/"
-  bamPath = "~/Data/Figures/scAbsolute/rawdata/"
-  bamFile = c("UID-DLP-SA1044_SLX-A96139A_000007_R03-C17.bam",
-              "UID-DLP-SA1044_SLX-A96139A_000057_R04-C47.bam")
+  bamPath = "~/Data/project1/20-align/issues/"
+  bamFile = ""
+
 
   RESULTPATH = "~/ExampleOutput.rds"
   
@@ -79,8 +78,8 @@ bamFile = do.call("c", (base::strsplit(bamFile, split=",")))
 
 # these variables are script arguments
 binSize = as.numeric(binSize)
-# bin sizes currently supported by QDNAseq framework
-stopifnot(binSize %in% c(1, 5, 10, 15, 30, 50, 100, 500, 1000))
+# bin sizes currently supported by QDNAseq framework + some custom binsizes
+stopifnot(binSize %in% c(1, 5, 10, 15, 30, 50, 100, 200, 500, 1000, 2000, 5000))
 
 species = "Human"
 genome = "hg19"
@@ -90,7 +89,7 @@ minLength = 10
 globalModel = NULL
 # optimization of segmentation
 testStatistic = "NegBinMM"
-splitPerChromosome=TRUE
+splitPerChromosome=ifelse(binSize >= 500, FALSE, TRUE)
 optimizeSegmentation=FALSE
 
 max_iterations=101
@@ -127,7 +126,7 @@ if(all(file.exists(filePaths)) && all(utils::file_test("-f", filePaths))){
 } else {
   if(any(is.null(bamFile) || length(bamFile) == 0 || bamFile == "")){
     print(paste0("Collecting all bam files in folder", bamPath))
-    filePaths = file.path(bamPath, list.files(path=bamPath, pattern = "\\.bam$"))
+    filePaths = gsub("//", "/", file.path(bamPath, list.files(path=bamPath, pattern = "\\.bam$")))
   }
 }
 stopifnot(all(file.exists(filePaths)))
@@ -177,6 +176,9 @@ scaledCN = computeInfotheo(scaledCN)
 
 # compute l2 segmentation error
 scaledCN = computeL2(scaledCN)
+
+# add protocol data for EC issues
+scaledCN = readPosition(scaledCN, filePaths)
 
 
 ## Include metadata

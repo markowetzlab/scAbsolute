@@ -483,6 +483,10 @@ computeL2 <- function(scaledCN){
 computeInfotheo <- function(scaledCN){
   
   require(infotheo)
+  if(is.null(featureData(scaledCN)[["replicationTiming"]])){
+    warning("Replication timing not available for binsize - aborting")
+    return(scaledCN)
+  }
   
   computeInfotheoSingle <- function(i){
     object = scaledCN[, i]
@@ -662,7 +666,7 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
   transformFun = "none" # non-linear transformations are not supported
   # QDNAseq only supports these bin sizes out of the box
   bins = c(1, 5, 10, 15, 30, 50, 100, 500, 1000)
-  stopifnot(binSize %in% bins)
+  stopifnot(binSize %in% bins || (binSize %in% c(200, 2000, 5000) && genome %in% c("hg19", "GRCh37")))
   
 
   # required for smaller binsizes
@@ -683,16 +687,22 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
     
     if(genome == "GRCh37"){
       require(QDNAseq.hg19, quietly=TRUE, warn.conflicts = FALSE)
-      binannotations = paste0("hg19.", binSize, "kbp.SR50")
-      data(list = c(binannotations), package="QDNAseq.hg19")
+      if(binSize %in% c(200, 2000, 5000)){
+        binannotations = paste0("hg19.", binSize, "kbp.SR50")
+        bins = readRDS(file.path(BASEDIR, "data/customBins", paste0(binannotations, ".RDS")))
+      }else{
+        binannotations = paste0("hg19.", binSize, "kbp.SR50")
+        data(list = c(binannotations), package="QDNAseq.hg19")
+        assign("bins", get(binannotations))
+      }
     }else{
       if(genome == "GRCh38"){
         require(QDNAseq.hg38, quietly=TRUE, warn.conflicts = FALSE)
         binannotations = paste0("hg38.", binSize, "kbp.SR50")
         data(list = c(binannotations), package="QDNAseq.hg38")
+        assign("bins", get(binannotations))
       }
     }
-    assign("bins", get(binannotations))
     # bins <- QDNAseq::getBinAnnotations(binSize=binSize)
   } else {
     if(species == "Mouse"){
@@ -754,6 +764,10 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
   if(species == "Human" & extendedBlacklisting){
     if(binSize < 10) stop("blacklisting doesn't support binsizes smaller than 10kb")
     # this is because our blacklisted regions have a resolution of 10kb
+    if(binSize %in% c(200, 2000, 5000) && genome == "GRCh37"){
+      # custom bins
+      extendedFilter = Biobase::fData(readCounts)[["use"]]
+    }
     readCounts = readFilter(readCounts, genome=genome)
     extendedFilter = Biobase::fData(readCounts)[["use"]]
   }else{
@@ -904,6 +918,10 @@ readPosition <- function(object, filePaths, selectRegion=c(as.character(c(1:22))
   require(Biobase)
   require(QDNAseq)
   require(MASS)
+  require(GenomicRanges)
+  require(IRanges)
+  require(GenomicAlignments)
+  require(S4Vectors)
   stopifnot("name" %in% colnames(Biobase::pData(object)))
   
   readPositionSingle <- function(obj, fP){
@@ -912,6 +930,7 @@ readPosition <- function(object, filePaths, selectRegion=c(as.character(c(1:22))
     high_quality_regions = high_quality_regions[valid]
     chromosome = decode(seqnames(high_quality_regions))
     copynumber = Biobase::assayDataElement(obj, "copynumber")[valid]
+    name = Biobase::pData(obj)[["name"]]
 
     read_position_table = readr::read_tsv(paste0(sub('\\.bam$', '', fP), ".position.tsv"), col_types = "cdd")
     
@@ -920,51 +939,71 @@ readPosition <- function(object, filePaths, selectRegion=c(as.character(c(1:22))
                      length=abs(read_position_table$length),
                      dist=c(diff(read_position_table$start), Inf))
     
-    if(!isSorted(read_table)){
-      warning(paste0("Read table is not sorted - ", fP))
+    read_table = GenomicRanges::sort(read_table, ignore.strand=TRUE)
+    # identify reads in high quality regions
+    hits = findOverlaps(read_table, high_quality_regions, type="within")
+    hq = read_table[queryHits(hits)]
+    
+    # peaks 
+    chromosome = decode(seqnames(high_quality_regions))
+    copynumber = Biobase::assayDataElement(obj, "copynumber")[valid]
+    start = high_quality_regions@ranges@start 
+    end = high_quality_regions@ranges@start + high_quality_regions@ranges@width -1
+    
+    cov = GenomicRanges::coverage(hq)
+    peaks = IRanges::slice(cov, lower=10)
+    peak_maxima = IRanges::viewMaxs(peaks)
+    peak_means = IRanges::viewMeans(peaks)
+    gr = reduce(GRanges(peaks))
+    gr$maxima = unlist(peak_maxima)
+    gr$means = unlist(peak_means)
+    #gr$name = name
+    #gr$status = "extrema"
+    hits = findOverlaps(gr, high_quality_regions, type="within")
+    gr$overlap_start = gr@ranges@start
+    gr$overlap_end =  gr@ranges@start + gr@ranges@width - 1
+    gr$bin_start = start[subjectHits(hits)]
+    gr$bin_end =  end[subjectHits(hits)]
+    gr$copy = copynumber[subjectHits(hits)]
+    gr$chrom = chromosome[subjectHits(hits)]
+      
+    # overlap regions (average) 
+    peaks_overlap = cov
+    for(ls in names(peaks_overlap)){
+      y = peaks_overlap[[ls]] 
+      runValue(y)[runValue(y) == 1] = 0;
+      peaks_overlap[[ls]] = y
+    }
+    no_overlap = cov
+    for(ls in names(no_overlap)){
+      y = no_overlap[[ls]] 
+      runValue(y)[runValue(y) != 0] = -1;
+      runValue(y)[runValue(y) == 0] = 1;
+      runValue(y)[runValue(y) == -1] = 0;
+      no_overlap[[ls]] = y
     }
     
-    hits = findOverlaps(high_quality_regions, read_table)
-    hq = read_table[subjectHits(hits)]
-    n_overlap = countOverlaps(hq, hq)
+    common_levels = base::intersect(names(peaks_overlap), unique(seqnames(high_quality_regions)))
+    peaks_overlap = peaks_overlap[common_levels]
+    cov = cov[common_levels]
+    no_overlap = no_overlap[common_levels]
+    high_quality_regions = keepSeqlevels(high_quality_regions, common_levels, pruning.mode="coarse")
     
-    temp = dplyr::tibble(element = queryHits(hits), dists = read_table[subjectHits(hits)]$dist,
-                         n_overlap = n_overlap,
-                         chrom = chromosome[queryHits(hits)], copy=copynumber[queryHits(hits)]) %>%
-      dplyr::filter(dists >= 0)
+    gr_overlap_2 = binnedAverage(high_quality_regions, peaks_overlap, "overlap")
+    gr_overlap_all = binnedAverage(high_quality_regions, cov, "overlap")
+    gr_no_overlap = binnedAverage(high_quality_regions, no_overlap, "no_overlap")
     
+    dens_average = dplyr::tibble(chrom = chromosome, copy=copynumber,
+                         overlap=gr_overlap_2$overlap,
+                         overlap_all=gr_overlap_all$overlap,
+                         no_overlap=gr_no_overlap$no_overlap, status="average")
     
-    compute_overlaps <- function(diffs, threshold){
-      pos = diffinv(diffs)
-      dis = as.matrix(dist(pos))
-      n = length(pos)-1
-      overlaps = sapply(1:n, function(index) sum(dis[index,(index+1):(n+1)] <= threshold))
-      return(sum(overlaps))
+    dens_extrema = as.data.frame(gr)
+    if(nrow(dens_extrema) > 0){
+      dens_extrema$status = "extrema"
     }
-    
-    filter_dists <- function(x){
-      return(x[x < quantile(x, 0.99)])
-    }
-    
-    dens = temp %>% dplyr::filter(chrom %in% sub("chr", "", selectRegion), copy > 0) %>% dplyr::group_by(chrom, element, copy) %>%
-      dplyr::summarise(n=n(),
-                       p_geom = MASS::fitdistr(dists[1:(length(dists)-1)], densfun = "geometric")[["estimate"]],
-                       p_geom_censored = MASS::fitdistr(filter_dists(dists[1:(length(dists)-1)]), densfun = "geometric")[["estimate"]],
-                       elem_overlap = mean(n_overlap, na.rm=TRUE), 
-                       o0 = compute_overlaps(dists[1:(length(dists)-1)], 0),
-                       o36 = compute_overlaps(dists[1:(length(dists)-1)], 36),
-                       o125 = compute_overlaps(dists[1:(length(dists)-1)], 125),
-                       .groups = 'keep') %>%
-      dplyr::group_by(chrom, copy) %>%
-      dplyr::summarise(n_elem = n(),
-                       mean_overlap = mean(elem_overlap, na.rm=TRUE), median_overlap = median(elem_overlap, na.rm=TRUE),
-                       nz_36 = sum(o36 != 0), nz_125 = sum(o125 != 0), nz_0 = sum(o0 != 0),
-                       mgp = mean(p_geom, na.rm=TRUE), mgpc = mean(p_geom_censored, na.rm=TRUE), medgp = median(p_geom, na.rm=TRUE), medgpc = median(p_geom_censored, na.rm=TRUE),
-                       mu0 = mean(o0), sum0 = sum(o0), sumf0 = sum(o0[o0 < quantile(o0, c(0.99))]), muf0 = mean(o0[o0 < quantile(o0, 0.99)]),
-                       mu36 = mean(o36), sum36 = sum(o36), sumf36 = sum(o36[o36 < quantile(o36, c(0.99))]), muf36 = mean(o36[o36 < quantile(o36, 0.99)]),
-                       mu125 = mean(o125), sum125 = sum(o125), sumf125 = sum(o125[o125 < quantile(o125, c(0.99))]), muf125 = mean(o125[o125 < quantile(o125, 0.99)]),
-                       .groups = 'keep') %>% dplyr::ungroup()
-
+    dens = dplyr::bind_rows(dens_average, dens_extrema)
+  
     dens$name = Biobase::pData(obj)[["name"]]
     dens$rpc = Biobase::pData(obj)[["rpc"]]
     
@@ -1213,18 +1252,72 @@ estimate_gc_correction <- function(segmentedCounts){
 }
 
 
+#' estimate_overdispersion
+#'
+#' \code{estimate_overdispersion} estimate alpha value per cell
+#'
+#' @param object a QDNAseq object with copynumber slot
+#'
+#' @return vector of alpha values
+#'
+#' @export
+estimate_overdispersion <- function(object, initial_estimate_alpha=0.1, robust=NULL){
+  # robust can be used to exclude copy number states, e.g. c(0, 1, 8)
+  valid = binsToUseInternal(object) 
+  
+  for(cellindex in 1:ncol(object)){
+    
+    alpha_cell <- tryCatch({
+    cn_states = Biobase::assayDataElement(object, "copynumber")[valid, cellindex]
+    # robust can be max copy number state (estimate for high values uncertain)
+    if(!is.null(robust)){
+      cn_levels = setdiff(unique(cn_states), c(0, robust))
+    }else{
+      cn_levels = setdiff(unique(cn_states), 0)
+    }
+    
+    alpha = c()
+    alpha_estimate = c()
+    alpha_estimate_size = c()
+    rpc = Biobase::phenoData(object[, cellindex])[["rpc"]]
+    
+    for(cn_l in cn_levels){
+      
+      tmp <- MASS::fitdistr(Biobase::assayDataElement(object, "calls")[valid, cellindex][cn_states == cn_l],
+                            dnbinom, list(mu=rpc * cn_l, size=1/initial_estimate_alpha),
+                            method = "L-BFGS-B",lower = c(0.01,1e-3),upper = c(10000,1e9))
+      alpha_estimate_cnl = 1.0/tmp$estimate[["size"]]
+      alpha_estimate = c(alpha_estimate, alpha_estimate_cnl)
+      alpha_estimate_size = c(alpha_estimate_size, sum(cn_levels == cn_l))
+    }
+    alpha_cell = stats::weighted.mean(alpha_estimate, alpha_estimate_size)
+    return(alpha_cell)
+   },
+    error=function(cond) {
+      # Choose a return value in case of error
+      return(NA)
+    })    
+    
+    alpha = c(alpha, alpha_cell)
+  }
+  return(alpha)
+}
+
+
 #' combineQDNASets
 #'
 #' \code{combineQDNASets} combines multiple QDNAseq objects to a single object, useful for parallelisation across cells.
 #'
 #' @param ... list of QDNAseq objects
+#' @param dropProtocol Boolean size of protocolData can be enormous if all metadata is included, can be droped for convenience (recommend extracting info separately if required)
 #'
 #' @return A QDNAseq object containing all the input objects
 #'
 #' @export
-combineQDNASets <- function(..., reduceMetadata=FALSE){
+combineQDNASets <- function(..., reduceMetadata=FALSE, dropProtocol=FALSE){
   require(Biobase, quietly=TRUE, warn.conflicts = FALSE)
   require(QDNAseq, quietly=TRUE, warn.conflicts = FALSE)
+  require(dplyr, quietly=TRUE, warn.conflicts = FALSE)
 
 
   x = ...[[1]]
@@ -1283,8 +1376,13 @@ combineQDNASets <- function(..., reduceMetadata=FALSE){
 
   outProtocolData = protocolData(x)
   if(dim(outProtocolData)[[2]] > 0){
-    protDat = data.frame(do.call(base::rbind, lapply(..., function(x) Biobase::protocolData(x)@data)))
-    rownames(protDat) = as.character(seq(1, dim(protDat)[[1]]))
+    if(!dropProtocol){
+      protDat = data.frame(dplyr::bind_rows(lapply(..., function(x) Biobase::protocolData(x)@data)))
+      rownames(protDat) = as.character(seq(1, dim(protDat)[[1]]))
+    }else{
+      protDat = data.frame(dplyr::bind_rows(lapply(..., function(x){return(Biobase::protocolData(x)@data %>% dplyr::filter(status == "extrema"))})))
+      rownames(protDat) = as.character(seq(1, dim(protDat)[[1]]))
+    }
     outProtocolData@data = protDat
   }
 
@@ -1305,6 +1403,122 @@ combineQDNASets <- function(..., reduceMetadata=FALSE){
   
   return(result)
 }
+
+
+#' predict_replicating
+#'
+#' \code{predict_replicating} update metadata with (predicted) value of cycling status
+#   predict replicating cells in each dataset
+#  (requires dft to have UID, SLX, and optionally TECHNOLOGY covariates, depending on batch variable)
+#   cycling activity measure is cellcycle.cmi_yrT
+#'
+#' @param dft phenoData object of QDNAseq object after running through scAbsolute pipeline
+#' @param cutoff_value Numeric number of standard deviations to use for outlier exclusion (cellcycle.cmi_yrT, fitted with normal dist)
+#' @param iqr_value Numeric number of iqr ranges to exclude outlier (cellcycle.kendall.repTime.weighted.median.cor.corrected)
+#' @param batch Character batch to use to group data on, before applying normal approximation
+#' @param hard_threshold Boolean remove data points higher than hard_threshold cycling activity for data sets with
+#' imbalanced cases (i.e. where cycling mode is higher than hard_threshold)
+#'
+#' @return updated data frame with cycling cell information
+#'
+#' @export
+predict_replicating <- function(dft, cutoff_value=1.50, iqr_value=1.50, batch="sample", hard_threshold=NULL){
+  
+  stopifnot(batch %in% c("all", "sample", "technology"))
+  require(stats)
+  if(batch == "all"){
+    stopifnot("UID" %in% colnames(dft))
+    stopifnot("SLX" %in% colnames(dft))
+    stopifnot("TECHNOLOGY" %in% colnames(dft))
+    dftin = dft %>% dplyr::group_by(UID, SLX, TECHNOLOGY)
+  }
+  if(batch == "sample"){
+    stopifnot("UID" %in% colnames(dft))
+    stopifnot("SLX" %in% colnames(dft))
+    dftin = dft %>% dplyr::group_by(UID, SLX)
+  }
+  if(batch == "technology"){
+    stopifnot("TECHNOLOGY" %in% colnames(dft))
+    dftin = dft %>% dplyr::group_by(TECHNOLOGY)
+  }
+  stopifnot(("cycling_activity_" %in% colnames(dft)) || ("cellcycle.kendall.repTime.weighted.median.cor.corrected" %in% colnames(dft)))
+  
+  # analysis within each dataset
+  dft1 = dftin %>% 
+    dplyr::group_modify(function(x, y){
+      
+      # DEBUG
+      #x = df_ploidy %>% dplyr::filter(UID %in% c("UID-NNA-TN3"))
+      #x = df_ploidy %>% dplyr::filter(UID %in% c("UID-DLP-SA1090"))
+      if(!("cycling_activity" %in% colnames(dft))){
+        x$cycling_activity = x$cellcycle.kendall.repTime.weighted.median.cor.corrected
+      }
+      
+      # compute mode of distribution
+      x$cycling_median = median(round(x$cycling_activity, digits = 3))
+     
+      # gini boxplot outlier - for cycling activity
+      Q_3 = quantile(x$cycling_activity, 0.75)
+      Q_1 = quantile(x$cycling_activity, 0.25)
+      IQR = Q_3 - Q_1
+      upper_whisker = min(max(x$cycling_activity), Q_3 + iqr_value * IQR)
+      
+      # sd of distribution (assume this is half-normal) below mode:
+      lower_whisker = max(min(x$cycling_activity), Q_1 - (IQR*1.5)) #lower whisker for boxplot
+      sd_est = sqrt((1 / (1 - (2/pi))) * (sd(x$cycling_activity[(x$cycling_activity < x$cycling_median) & (x$cycling_activity > lower_whisker)], na.rm=TRUE)^2))
+      
+      # gini boxplot outlier - for kendall test (only extrema)
+      if("cellcycle.cmi_yrT" %in% colnames(x) && !is.null(iqr_value)){
+        Q_3 = quantile(x$cellcycle.cmi_yrT, 0.75)
+        Q_1 = quantile(x$cellcycle.cmi_yrT, 0.25)
+        IQR = Q_3 - Q_1
+        upper_whisker = min(max(x$cellcycle.cmi_yrT), Q_3 + (iqr_value * IQR))
+        x$cycling_cutoff_iqr = upper_whisker
+      }
+      
+      x$cycling_sd_est = sd_est
+      x$cycling_cutoff_sd = x$cycling_median + (cutoff_value * x$cycling_sd_est)
+      if("cellcycle.cmi_yrT" %in% colnames(x) && !is.null(iqr_value)){
+        x$replicating = (x$cycling_activity > x$cycling_cutoff_sd) | (x$cellcycle.cmi_yrT > x$cycling_cutoff_iqr)
+      }else{
+        x$replicating = x$cycling_activity > x$cycling_cutoff_sd
+      }
+
+      if(!is.null(hard_threshold)){
+        x$replicating = x$replicating | (x$cycling_activity > hard_threshold)
+      }
+      
+      
+      
+      #ggplot(data=x) + geom_quasirandom(aes(x="NA", y=cycling_activity, color=replicating))
+      
+      return(x)
+    }) %>% dplyr::ungroup()
+  
+  return(dft1)
+}
+
+# flag ploidy outlier in phenoData based on SLX, UID grouping - helper function
+qc_ploidy <- function(dft, range=0.5){
+  require(stats)
+  stopifnot("UID" %in% colnames(dft))
+  stopifnot("SLX" %in% colnames(dft))
+  stopifnot("ploidy" %in% colnames(dft))
+  
+  dft1 = dft %>% dplyr::group_by(UID, SLX) %>% 
+    dplyr::group_modify(function(x, y){
+      
+      #x = df2 %>% dplyr::filter(SLX == "SLX-A73044A")
+      # NOTE: median is important here to get unbiased estimate of mode
+      mp = median(x$ploidy, na.rm=TRUE)
+      x$ploidy.outlier = (x$ploidy < (mp - range)) | (x$ploidy > (mp + range))
+    
+      return(x)
+    }) %>% dplyr::ungroup()
+  
+  return(dft1)
+}
+
 
 #' getSegTable
 #'
@@ -1405,3 +1619,31 @@ writeSegTable <- function(object, filename, trimLength=1, minLength=NULL){
   
   write.table(df, file=filename, quote=FALSE, sep="\t", row.names=FALSE, col.names=TRUE, append=FALSE)
 }
+
+#' exportSignals 
+#'
+#' \code{exportSignals} export QDNAseq object to a tsv file, for processing with signals
+#'
+#' @param object QDNAseq object
+#' @param filename filename to write file to
+#'
+#' @export
+exportSignals <- function(object, file, ...){
+  require(Biobase)
+  
+  valid = binsToUseInternal(object)
+  object = object[valid]
+  feature <- featureNames(object)
+  chromosome <- fData(object)$chromosome
+  start <- fData(object)$start
+  end <- fData(object)$end
+  dat <- assayDataElement(object, "copynumber")
+  calls <- assayDataElement(object, "calls")
+  name = pData(object)[["name"]]
+  
+  out <- data.frame(chr=chromosome, start=as.integer(start),
+                    end=as.integer(end), state=as.integer(c(dat)), copy=c(calls), cell_id=rep(name, each=dim(dat)[[1]]))
+  write.table(out, file=file,
+              quote=FALSE, sep="\t", na="", row.names=FALSE, ...)
+}
+

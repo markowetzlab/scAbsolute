@@ -25,8 +25,10 @@ if (length(args) >= 3){
 
 if (dir.exists(d) && (is.null(f) || !file.exists(f))){
   # merge based on filename ending (f) in folder (d) to file args[1]
+  warning("Merge based on wildcard files in folder")
   setwd(d)
-  rdsFiles = list.files(pattern=paste0(f, ".rds$"), recursive=FALSE)
+  rdsFiles = list.files(c(list.dirs(d, recursive=FALSE)), pattern=".rds$", recursive=FALSE, full.names=TRUE)
+  print(paste0("Number of files: ",  length(rdsFiles)))
 }else{
   # merge all files in args[2:end] to file args[1]
   stopifnot(all(endsWith(rdsFiles, ".rds")))

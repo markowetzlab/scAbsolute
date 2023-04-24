@@ -38,7 +38,7 @@ echo "${RESULTPATH}/${post}_segmented_counts.txt"
 echo "$(cat "${post}_segmented_regions.txt" | wc -l)"
 echo "START"
 
-/opt/SCICoNE/build/inference --n_cells $rows  --n_regions $(cat "${post}_segmented_region_sizes.txt" | wc -l) --n_iters 10000 --n_nodes 100 --ploidy $PLOIDY --verbosity 1 --seed 42 --copy_number_limit 8 --d_matrix_file $(echo "${RESULTPATH}/${post}_segmented_counts.txt" | tr -s / ) --region_sizes_file="${post}_segmented_region_sizes.txt" --postfix="$post"
+/opt/SCICoNE/build/inference --n_cells $rows  --n_regions $(cat "${post}_segmented_region_sizes.txt" | wc -l) --n_iters 10000 --n_nodes 100 --ploidy $PLOIDY --verbosity 2 --seed 42 --copy_number_limit 8 --d_matrix_file $(echo "${RESULTPATH}/${post}_segmented_counts.txt" | tr -s / ) --region_sizes_file="${post}_segmented_region_sizes.txt" --postfix="$post"
 
 mv -f "${post}_inferred_cnvs.csv" "${post}.scicone.csv"
 mv -f "${post}_cell_node_ids.tsv" "${post}.scicone.nodes.csv"
