@@ -221,6 +221,7 @@ plotQDNAseqCopynumber <- function(object, round=FALSE, copynumber=TRUE, ylim=c(0
 #' @param ylim tuple of minimum and maximum count value to show. Default: c(0, 9)
 #' @param ybreaks format of y axis breaks
 #' @param readinfo Boolean add information about sample (as title)
+#' @param xlab x axis label
 #' @param ylab y axis label
 #' @param chromosome_break_label x axis names to show (default is medium dense, with not all chromosomes shown)
 #' @param main title of plot
@@ -237,7 +238,7 @@ plotQDNAseqCopynumber <- function(object, round=FALSE, copynumber=TRUE, ylim=c(0
 #'
 #' @export
 plotCopynumber <- function(object, showUnique=TRUE, round=FALSE, correction=FALSE, ylim=c(0, 10),
-                           ybreaks=NULL, readinfo=TRUE, ylab="absolute copy number",
+                           ybreaks=NULL, readinfo=TRUE, ylab="absolute copy number", xlab=NULL,
                            chromosome_break_label = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
                                                       "11", "", "13", "", "15", "", "17", "", "19", "",
                                                       "21", "", "X", "Y"),
@@ -389,10 +390,19 @@ plotCopynumber <- function(object, showUnique=TRUE, round=FALSE, correction=FALS
     theme_cowplot()
 
   if(isSingleChromosome){
-    p = p + scale_x_continuous(paste0("chromosome ", chromosome_break_label), breaks=NULL, labels=chromosome_break_label, expand=c(0,0))
+    if(is.null(xlab)){
+      p = p + scale_x_continuous(paste0("chromosome ", chromosome_break_label), breaks=NULL, labels=chromosome_break_label, expand=c(0,0))
+    }else{
+      p = p + scale_x_continuous(xlab, breaks=NULL, labels=chromosome_break_label, expand=c(0,0))
+    }
   }else{
-    p = p + geom_vline(xintercept = chromosome_boundaries, linetype = "dashed", size=0.5, alpha=1.0) +
-      scale_x_continuous("chromosome", breaks=chromosome_break_position, labels=chromosome_break_label, expand=c(0,0))
+    if(is.null(xlab)){
+      p = p + geom_vline(xintercept = chromosome_boundaries, linetype = "dashed", size=0.5, alpha=1.0) +
+        scale_x_continuous("chromosome", breaks=chromosome_break_position, labels=chromosome_break_label, expand=c(0,0))
+    }else{
+      p = p + geom_vline(xintercept = chromosome_boundaries, linetype = "dashed", size=0.5, alpha=1.0) +
+        scale_x_continuous(xlab, breaks=chromosome_break_position, labels=chromosome_break_label, expand=c(0,0))
+    }
   }
 
   return(p)
