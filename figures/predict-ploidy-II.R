@@ -131,7 +131,7 @@ print(pd %>% dplyr::group_by(UID, SLX) %>% dplyr::filter(startsWith(UID, "UID-DL
 
 # load cellcycle info
 df_cellcycle_DLP = readr::read_csv("~/mean-variance-model/data/shahlab/cellcycle-info-DLP.all.csv", col_types = "cccccd")  %>% dplyr::select(UID, SLX, filename, cellcycle, quality)
-df_cellcycle_FML = readr::read_tsv("~/mean-variance-model/data/fml/annotation-PEO1-PLOIDY-2N.tsv", col_types = "ci", col_names = c("cellid", "nocells")) %>%
+df_cellcycle_FML = readr::read_tsv("~/mean-variance-model/data/fml/annotation-PEO1-PLOIDY-2N.curated.tsv", col_types = "cic", col_names = c("cellid", "nocells", "qc")) %>%
   #dplyr::filter(manual == "okay") %>%
   dplyr::mutate(cellcycle = paste0(2*nocells, "N"), 
                 cellid = gsub("_", "-", cellid))
@@ -226,7 +226,11 @@ meta_3 = dplyr::left_join(df %>% dplyr::filter(UID %in% c("UID-FML-PEO1-PLOIDY-2
   dplyr::mutate(celltag_celenone=paste0(AA, "-", AB, "-", AC, "-", AD, "-", AE)) %>%
   dplyr::select(name, celltag_celenone), df_cellcycle_FML, by=c("celltag_celenone"="cellid")) 
 df = dplyr::left_join(df, meta_3, by="name", suffix=c("", ".y")) %>% 
-  dplyr::mutate(cellcycle = ifelse(cellcycle == "GG", cellcycle.y, cellcycle))
+  dplyr::mutate(cellcycle = ifelse(cellcycle == "GG", cellcycle.y, cellcycle)) %>%
+  dplyr::filter(qc == "pass" | is.na(qc))
+
+table(df$UID, df$cellcycle)
+
 #a = df %>% dplyr::filter(UID == "UID-FML-PEO1-PLOIDY-2N") 
 # load full data
 CN = combineQDNASets(lapply(files,function(x) readRDS(x)), dropProtocol = TRUE)
@@ -272,7 +276,7 @@ prop.table(table(df$UID, df$prediction.quality > 0.75), margin = 1)
   #geom_density2d(data=extra_data %>% dplyr::filter(rpc > rpc_cutoff), aes(x=rpc, y=prediction, color="black")) +
 data_dlp = predict_replicating(df) %>% dplyr::filter(startsWith(UID, "UID-DLP"), rpc > rpc_cutoff,
        prediction.quality > 0.50, !is.na(cellcycle) | is.na(cellcycle) & !replicating) %>%
-       dplyr::mutate(nice_SLX = gsub("SLX-", "DLP ", gsub("SLX-A96139A", "DLP T47D", SLX)))
+       dplyr::mutate(nice_SLX = gsub("SLX-", "DLP ", gsub("SLX-A96139A", "DLP+ T47D", SLX)))
 data_annotated_dlp = data_dlp %>% dplyr::filter(
   UID %in% c("UID-DLP-SA1044") | UID == "UID-DLP-SA928" & SLX %in% c("SLX-A73044A", "SLX-A90553C"))
 data_extra_dlp = data_dlp %>% dplyr::filter(!(UID %in% c("UID-DLP-SA1044") &
@@ -283,7 +287,7 @@ table(data_extra_dlp$UID2)
 
 ## Model DLP (non diploid) ====
 p_dlp = ggplot(data=data_annotated_dlp %>%
-                 dplyr::mutate(SLX = ifelse(SLX == "SLX-A96139A", " DLP T47D", gsub("SLX-", "", SLX)))) + # %>% dplyr::filter(UID != "UID-DLP-SA928")) +
+                 dplyr::mutate(SLX = ifelse(SLX == "SLX-A96139A", " DLP+ T47D", gsub("SLX-", "", SLX)))) + # %>% dplyr::filter(UID != "UID-DLP-SA928")) +
   #geom_point(aes(x=100, y= 0.1), color="red", shape=4, size=4) +
   #geom_histogram(aes(x=ploidy, color=cellcycle)) +
   coord_cartesian(ylim=c(0, 0.08)) + 
@@ -300,13 +304,14 @@ p_dlp = ggplot(data=data_annotated_dlp %>%
   #geom_density2d(data=data_extra_dlp, aes(x=rpc, y=prediction), color="blue") + 
   scale_linetype_manual(name="Copy number profile", values = c("DLP diploid"="dashed", "DLP aneuploid"="solid", "PEO1 FUCCI"="solid")) +
   scale_color_manual(values=c("D"="#009E73", "G1"="#E69F00", "G2"="#56B4E9", "S"="#CC79A7", "4N"="#0072B2"), drop=FALSE) +
-  guides(linetype = guide_legend(title = "Reference\ncell profiles",
-                                 override.aes = list(fill = "#FFFFFF", color=c("cyan", "cyan", "blue")), keywidth = 3, keyheight = 1, nrow=3),
+  guides(linetype = guide_legend(title = "  Reference\n  cell profiles",
+                                 override.aes = list(fill = "#FFFFFF", color=c("cyan", "cyan", "blue")), keywidth = 3, keyheight = 1, nrow=3, title.position="left"),
          color = "none") + #guide_legend(title = "Cell cycle annotation", override.aes = list(size=3), nrow=2)) +
   theme_pubclean(base_size=20) +
   theme(panel.spacing.y = unit(1.2, "lines"),
         legend.key = element_rect(fill = "white", colour = "white"),
-        strip.background.x = element_blank(), 
+        strip.background.x = element_blank(),
+        legend.title.align=0.1,
         #strip.background.y = element_rect(colour="white", fill="white"),
         #axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
         #legend.position = "none",
@@ -330,10 +335,10 @@ prediction_model = predict(simple_model_dlp, newdata = data_annotated_dlp %>% dp
 data_annotated_dlp$residual = data_annotated_dlp$prediction - prediction_model
 
 p_dlp_residual = ggplot(data = data_annotated_dlp %>% dplyr::filter(rpc < 200) %>%
-                          dplyr::mutate(SLX = ifelse(SLX == "SLX-A96139A", " DLP T47D", gsub("SLX-", "", SLX)))) +
+                          dplyr::mutate(SLX = ifelse(SLX == "SLX-A96139A", " DLP+ T47D", gsub("SLX-", "", SLX)))) +
   geom_point(aes(x=rpc, y=residual, color=cellcycle), size=0.8) +
   facet_wrap(~SLX) + theme_pubclean(base_size=20) +
-  geom_hline(yintercept = 0.005, color="red", linetype="dashed") +
+  #geom_hline(yintercept = 0.005, color="red", linetype="dashed") +
   geom_vline(xintercept = 75, color="red", linetype="dashed") +
   coord_cartesian(ylim=c(0, 0.04)) +
   xlab(expression(rho)) +
@@ -538,9 +543,10 @@ p_fucci_1 = ggplot(data = data_fucci %>% # %>% #) + # %>% # %>% dplyr::filter(rp
               aes(x=rpc, y=prediction), color="blue", method=robustbase::lmrob, formula=y~I(x)+I(x^2)) +
   geom_smooth(data=data_extra_dlp %>% dplyr::filter(UID2 != "UID-DLP-SA928", rpc < 150) %>% dplyr::select(-nice_SLX),
               aes(x=rpc, y=prediction), linetype="solid", color="cyan", method=robustbase::lmrob, formula=y~I(x)+I(x^2)) +
-  xlab(expression(rho)) +
+  xlab(expression(rho)) + ylab("read density") +
   scale_color_manual(values=c("D"="#009E73", "G1"="#E69F00", "G2"="#56B4E9", "S"="#CC79A7", "4N"="#0072B2"), drop=FALSE) +
-  scale_x_continuous(breaks=scales::pretty_breaks(n=3)) + 
+  scale_x_continuous(breaks=c(200, 600)) + #scales::pretty_breaks(n=3)) + 
+  #scale_x_continuous(breaks=scales::pretty_breaks(n=3)) + 
   theme_pubclean(base_size=20) +
   theme(panel.spacing.y = unit(1.2, "lines"),
         legend.key = element_rect(fill = "white", colour = "white"),
@@ -684,13 +690,14 @@ p3 = ggplot(data = data_fucci_eval) +
   geom_point(data = data_fucci_eval %>% dplyr::filter(UID == "UID-FML-PEO1-PLOIDY-2N") %>%
                                         dplyr::mutate(cellcycle = factor(cellcycle, levels=c("D", "G1", "G2", "S", "2N", "4N", "6N", "8N", "10N"))),
              aes(x=rpc, y=residual, color=cellcycle, shape="original")) +
-  coord_cartesian(ylim=c(0, 0.05)) +
+  coord_cartesian(ylim=c(0, 0.05), xlim=c(50, 600)) +
   ylab("residual") + xlab(expression(rho)) +
   scale_shape_manual(values=c("original"=21, "downsample 50%"=24, "downsample 25%"=25)) +
   scale_color_manual(values=c("D"="#009E73", "G1"="#E69F00", "G2"="#56B4E9", "S"="#CC79A7", "2N"="#fde725", "4N"="#5ec962", "6N"="#21918c", "8N"="#3b528b", "10N"="#440154"), drop=FALSE) + # "2N"="#0072B2", "4N"="#000000", "6N"="#444444", "8N"="#777777", "10N"="#999999"), drop=FALSE) +
   theme_pubclean(base_size=20) +
   theme(panel.spacing.y = unit(1.2, "lines"),
         legend.key = element_rect(fill = "white", colour = "white"),
+        legend.spacing.x = unit(0.25, 'cm'),
         #strip.background.x = element_blank(), 
         #strip.background.y = element_rect(colour="white", fill="white"),
         #axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
@@ -701,8 +708,8 @@ p3 = ggplot(data = data_fucci_eval) +
         strip.placement = "outside") +
   #scale_color_discrete(labels=c("FUCCI G2 (4N, DS)", "FUCCI S (2N-4N, DS)", "FUCCI G1 (2N)", "FUCCI S (2N-4N)", "DOUBLETS (4N, DS)")) +
   #scale_shape_manual(name="Read depth", labels=c("downsampling", "original read depth")) + 
-  guides(color = guide_legend(title="Dataset", nrow=5, override.aes = list(size=3), title.position = "top"),
-         shape = guide_legend(title="Read depth", nrow=3, override.aes = list(size=3)))
+  guides(color = guide_legend(title="Condition", nrow=3, override.aes = list(size=3), title.position = "left"),
+         shape = guide_legend(title="Read\ndepth", nrow=3, override.aes = list(size=3), title.position = "left"))
   
 p3
 
@@ -751,29 +758,27 @@ prediction_simple_model_fml_fucci_prediction = caret::confusionMatrix(table(pred
 prediction_simple_model_fml_fucci_prediction
 
 
-# TODO manual analysis of images to reduce errors in dispensing further....
-
-
-leg = get_legend(p_dlp +  theme(legend.margin=margin(t=0, b=0, unit="mm")))
-leg_color = get_legend(p3 + guides(shape = "none") + theme(legend.margin=margin(r = 0, l=1, unit='cm')))
-leg_shape = get_legend(p3 + guides(color = "none") + theme(legend.margin=margin(t = 0, b=0, unit='cm')))
+leg = get_legend(p_dlp) # +  theme(legend.margin=margin(t=5, b=5, unit="mm")))
+leg_color = get_legend(p3 + guides(shape = "none")) # + theme(legend.margin=margin(r = 0, l=1, unit='cm')))
+leg_shape = get_legend(p3 + guides(color = "none")) # + theme(legend.margin=margin(t = 0, b=0, unit='cm')))
 Fig_ploidy_II = ggpubr::ggarrange(
+  ggpubr::ggarrange(leg_color, leg, leg_shape, ncol=3, widths = c(1.2, 1, 1)),
   ggpubr::ggarrange(
-      p_dlp + theme(legend.position = "none"),
-      p_dlp_residual + theme(legend.position = "none"), ncol=1, labels=c("A", "B")),
-  ggpubr::ggarrange(
-    ggpubr::ggarrange(leg_color, ggpubr::ggarrange(leg, leg_shape, ncol=1), ncol=2, widths = c(1, 2)),
-    ggpubr::ggarrange(p_fucci_1 + ggtitle("\n     100% ") + theme(legend.position = "none", plot.title = element_text(size=16)),
-                      p_fucci_2 + ggtitle("read depth\n     50% ") + theme(legend.position = "none", plot.title = element_text(size=16), axis.title.y = element_blank()),
-                      p_fucci_3 + ggtitle("\n      25%") + theme(legend.position = "none", plot.title = element_text(size=16), axis.title.y = element_blank()),
-                      nrow=1, widths = c(1.5,1,1)), # single plots for p_fucci with different scale: p_fucci_1 p_fucci_2 p_fucci_3
-    p3 + theme(legend.position = "none"), labels=c("", "C", "D"), ncol=1, heights = c(3.5,5,5), hjust=0.5, vjust=0.5),
-  labels=c("", ""), ncol=2, widths = c(2.2, 2.5)
+        p_dlp + theme(legend.position = "none"),
+        ggpubr::ggarrange(p_fucci_1 + ggtitle("\n     100% ") + xlab("") + theme(legend.position = "none", plot.title = element_text(size=16)),
+                          p_fucci_2 + ggtitle("read depth  \n   50% ") + theme(legend.position = "none", plot.title = element_text(size=16, hjust = 0.5), axis.title.y = element_blank()),
+                          p_fucci_3 + ggtitle("\n      25%") + xlab("") + theme(legend.position = "none", plot.title = element_text(size=16), axis.title.y = element_blank()),
+                          nrow=1, widths = c(1.5,1,1)), # single plots for p_fucci with different scale: p_fucci_1 p_fucci_2 p_fucci_3
+       p_dlp_residual + theme(legend.position = "none"),
+       p3 + theme(legend.position = "none"),
+       ncol=2, nrow=2, labels=c("a", "c", "b", "d") , font.label = list(size=20)),
+  ncol=1, heights = c(1, 8)
 )
+
 
 Fig_ploidy_II
 
-ggpubr::ggexport(Fig_ploidy_II, filename = "~/scAbsolute/figures/Fig_ploidy_II.pdf", width = 12, height = 8)
+ggpubr::ggexport(Fig_ploidy_II, filename = "~/scAbsolute/figures/Fig_ploidy_II.pdf", width = 12, height = 9)
 
 
 
@@ -785,9 +790,9 @@ ggplot(data = pd) +
 
 pd %>% dplyr::filter(UID == "UID-FML-PEO1-PLOIDY-2N") %>% dplyr::pull(name)
 
-names = pd %>% dplyr::filter(UID == "UID-FML-PEO1-PLOIDY-2N") %>% dplyr::pull(name)
 CN2 = readRDS("~/Data/project1/30-scale/500/scaling/UID-FML-PEO1-PLOIDY-2N_500.rds")
-df2 = df %>% dplyr::filter(name %in% names)
+names = df %>% dplyr::filter(UID == "UID-FML-PEO1-PLOIDY-2N") %>% dplyr::pull(name)
+df2 = df %>% dplyr::filter(name %in% names, !is.na(cellcycle))
 cellcycle_annotation = factor(df2$cellcycle[match(df2$name, names)], levels=c("2N", "4N", "6N", "8N", "10N"))
 
 Sup_ploidy_prediction_doublets = plotCopynumberHeatmap(CN2[, names], row_split = cellcycle_annotation, show_cell_names = FALSE)

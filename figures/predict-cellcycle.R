@@ -63,8 +63,8 @@ custom_label_function <- function(x, y){
     y = z %>% dplyr::transmute(dplyr::recode(UID, 
                                              "UID-10X-Andor-2020-50941-SNU-638" = "10X SNU-638", 
                                              "UID-10X-Fibroblast" = "10X Fibroblast", 
-                                             "UID-DLP-SA1044" = "DLP T-47D", 
-                                             "UID-DLP-SA928" = "DLP NA12878", 
+                                             "UID-DLP-SA1044" = "DLP+ T-47D", 
+                                             "UID-DLP-SA928" = "DLP+ NA12878", 
                                              "UID-JBL-NA12878" = "JBL NA12878", 
                                              "UID-JBL-PEO1" = "JBL PEO1", 
                                              "UID-NNA-mb453" = "ACT mb453", 
@@ -76,11 +76,11 @@ custom_label_function <- function(x, y){
                                                "SLX-00001" = "10X FB nuclei", 
                                                "SLX-18431" = "JBL NA12878",
                                                "SLX-20749" = "JBL NA12878",
-                                               "SLX-A73044A" = "DLP A73044A",
-                                               "SLX-A90553C" = "DLP A90553C",
-                                               "SLX-A90689B" = "DLP A90689B",
-                                               "SLX-A90689C" = "DLP A90689C",
-                                               "SLX-A96139A" = "DLP T-47D",
+                                               "SLX-A73044A" = "DLP+ A73044A",
+                                               "SLX-A90553C" = "DLP+ A90553C",
+                                               "SLX-A90689B" = "DLP+ A90689B",
+                                               "SLX-A90689C" = "DLP+ A90689C",
+                                               "SLX-A96139A" = "DLP+ T-47D",
                                                "UID-10X-Fibroblast-cell" = "UID-10X-Fibroblast"))
     }else{
       y = z
@@ -92,11 +92,11 @@ custom_label_function <- function(x, y){
                                              "SLX-00000" = "10X FB cell", 
                                              "SLX-00001" = "10X FB nuclei", 
                                              "SLX-18431" = "JBL NA12878",
-                                             "SLX-A73044A" = "DLP A73044A",
-                                             "SLX-A90553C" = "DLP A90553C",
-                                             "SLX-A90689B" = "DLP A90689B",
-                                             "SLX-A90689C" = "DLP A90689C",
-                                             "SLX-A96139A" = "DLP T-47D",
+                                             "SLX-A73044A" = "DLP+ A73044A",
+                                             "SLX-A90553C" = "DLP+ A90553C",
+                                             "SLX-A90689B" = "DLP+ A90689B",
+                                             "SLX-A90689C" = "DLP+ A90689C",
+                                             "SLX-A96139A" = "DLP+ T-47D",
                                              "UID-10X-Fibroblast-cell" = "UID-10X-Fibroblast"))
   }
   
@@ -227,10 +227,10 @@ p1 = ggplot(data=df %>% dplyr::mutate(SLX = case_when(UID == "UID-10X-Fibroblast
 p1
 
 # G1 and S phase only
-data_cutoff = df %>% dplyr::mutate(SLX3 = ifelse(UID=="UID-FML-PEO1-FUCCI", paste0("DLPi ", SLX), as.character(SLX))) %>%
+data_cutoff = df %>% dplyr::mutate(SLX3 = ifelse(UID=="UID-FML-PEO1-FUCCI", paste0("mDLP+ ", SLX), as.character(SLX))) %>%
                  dplyr::mutate(SLX2 = factor(SLX, levels=c("SLX-A73044A", "SLX-A90553C", "SLX-A96139A",
                                                            "SLX-23300", "SLX-23301", "SLX-23302"), 
-                                             labels = c("DLP A73044A", "DLP A90553C", "DLP T47D", "DLPi 23300", "DLPi 23301", "DLPi 23302"), ordered=TRUE)) %>%
+                                             labels = c("DLP+ A73044A", "DLP+ A90553C", "DLP+ T47D", "mDLP+ 23300", "mDLP+ 23301", "mDLP+ 23302"), ordered=TRUE)) %>%
                  dplyr::filter((nc2 > 1000 &
                                  UID %in% c("UID-DLP-SA928")) |
                                  UID == "UID-DLP-SA1044" | UID == "UID-FML-PEO1-FUCCI",
@@ -503,7 +503,7 @@ p_annotation
 
 df_seq = dplyr::bind_rows(df_A %>% dplyr::filter(startsWith(UID, "UID-10X-F") | startsWith(UID, "UID-DLP-SA928")), df %>% dplyr::filter(!(startsWith(UID, "UID-10X-F") | startsWith(UID, "UID-DLP-SA928")))) %>%
   dplyr::mutate(technology = dplyr::case_when(startsWith(UID, "UID-10X") ~ "10X",
-                                              startsWith(UID, "UID-DLP") ~ "DLP",
+                                              startsWith(UID, "UID-DLP") ~ "DLP+",
                                               startsWith(UID, "UID-NNA") ~ "ACT",
                                               TRUE ~ "other"),
                 UID3 = dplyr::case_when(UID=="UID-10X-Fibroblast-nuclei" ~ "Fibroblast",
@@ -537,7 +537,7 @@ p_sequencing = ggplot(data=df_seq %>% dplyr::filter( #!(SLX %in% c("SLX-A90694B"
 p_sequencing
 
 p_groundtruth = ggplot(data=df %>% dplyr::filter(UID=="UID-FML-PEO1-FUCCI") %>%
-                         dplyr::mutate(SLX2 = gsub("SLX-", "DLPi ", SLX))) +
+                         dplyr::mutate(SLX2 = gsub("SLX-", "mDLP+ ", SLX))) +
   geom_quasirandom(aes(x=cellcycle, y=cellcycle.kendall.repTime.weighted.median.cor.corrected, name=name), alpha=0.9) +
   #geom_quasirandom(aes(x=cellcycle, y=cellcycle.kendall.repTime.weighted.mean.cor.corrected, color=as.factor(high_quality))) +
   facet_wrap(~SLX2, labeller=custom_label_function) + theme_pubclean() + #scale_color_continuous(name="# of CNAs", trans="log") +
@@ -560,15 +560,15 @@ p_groundtruth
 leg = get_legend(p_sequencing)
 leg_lines = get_legend(p2)
 Fig_cellcycle = ggpubr::ggarrange(ggpubr::ggarrange(
-  ggpubr::ggarrange(leg, leg_lines, nrow=2, labels=c("", ""), heights=c(1,2)), p_sequencing + theme(legend.position = "none"), nrow =1, widths=c(2, 5), labels=c("", "A")),
+  ggpubr::ggarrange(leg, leg_lines, nrow=2, labels=c("", ""), heights=c(1,2)), p_sequencing + theme(legend.position = "none"), nrow =1, widths=c(2, 5), labels=c("", "a"), font.label = list(size=20)),
                                   p2 + labs(x="Cycling activity") + theme(legend.position="none"),
-                                  ggpubr::ggarrange(p_annotation + theme(legend.position="none"), p_groundtruth, nrow=1, widths=c(1,1), labels=c("C", "D")),
-                                  nrow=3, labels=c("", "B", ""), heights = c(1.05, 1, 1))
+                                  ggpubr::ggarrange(p_annotation + theme(legend.position="none"), p_groundtruth, nrow=1, widths=c(1,1), labels=c("c", "d"), font.label = list(size=20)),
+                                  nrow=3, labels=c("", "b", ""), heights = c(1.05, 1, 1), font.label = list(size=20))
 Fig_cellcycle
 
 Fig_cellcycle_sup = ggpubr::ggarrange(p5 + theme(legend.position = "none"),
                                       p7,
-                                      ncol=1, nrow=2, labels=c("", ""), heights = c(2, 5))
+                                      ncol=1, nrow=2, labels=c("", ""), heights = c(2, 5), font.label = list(size=20))
 Fig_cellcycle_sup
 
 
@@ -576,7 +576,7 @@ ggplot(data=df %>% dplyr::filter(UID=="UID-FML-PEO1-FUCCI")) +
   geom_quasirandom(aes(x=cellcycle, y=total.reads, name=name), alpha=0.9)
 
 sup_groundtruth = ggplot(data=df %>% dplyr::filter(UID=="UID-FML-PEO1-FUCCI") %>%
-                         dplyr::mutate(SLX2 = gsub("SLX-", "DLPi ", SLX))) +
+                         dplyr::mutate(SLX2 = gsub("SLX-", "mDLP+ ", SLX))) +
   geom_quasirandom(aes(x=cellcycle, y=cellcycle.cmi_yrT, name=name), alpha=0.9) +
   #geom_quasirandom(aes(x=cellcycle, y=cellcycle.kendall.repTime.weighted.mean.cor.corrected, color=as.factor(high_quality))) +
   facet_wrap(~SLX2, labeller=custom_label_function) + theme_pubclean() + #scale_color_continuous(name="# of CNAs", trans="log") +

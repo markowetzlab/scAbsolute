@@ -93,7 +93,7 @@ df1 = pd %>% dplyr::filter(SLX=="SLX-00000" | SLX %in% c("SLX-18430","SLX-18431"
   dplyr::mutate(cellcycle = case_when(UID %in% c("UID-NNA-mb453", "UID-10X-Fibroblast-cell", "UID-10X-Fibroblast-nuclei", "UID-10X-Spikein-1pc") ~ "G1", 
                                       TRUE ~ cellcycle)) %>%
   dplyr::mutate(technology = dplyr::recode(as.factor(substr(UID, 5, 7)),
-                                           "DLP" = "DLP",
+                                           "DLP" = "DLP+",
                                            "NNA" = "ACT",
                                            "10X" = "10X",
                                            "JBL" = "JBL")) %>%
@@ -657,23 +657,23 @@ prop.table(tb, c(3,2))
 
 # clean outlier cells
 dat = dplyr::bind_rows(df_ploidy %>% dplyr::mutate(method="scAbsolute") %>% dplyr::filter(technology != "ACT") %>% 
-                               dplyr::mutate(UID3=factor(UID2, ordered=TRUE, levels=UID_levels), technology = factor(technology, ordered=TRUE, levels=c("10X", "DLP", "ACT - cell lines",  "ACT - tumours"))) %>%
+                               dplyr::mutate(UID3=factor(UID2, ordered=TRUE, levels=UID_levels), technology = factor(technology, ordered=TRUE, levels=c("10X", "DLP+", "ACT - cell lines",  "ACT - tumours"))) %>%
                                dplyr::filter(!startsWith(UID, "UID-NNA-T"), !startsWith(UID, "UID-10X-BR"), !startsWith(UID, "UID-DLP-SA1090"), !startsWith(UID, "UID-DLP-SA1101"), !startsWith(UID, "UID-DLP-SA1088"),
                                              !startsWith(UID, "UID-DLP-SA1135"), !startsWith(UID, "UID-DLP-SA928"), !startsWith(UID, "UID-DLP-SA039"), !startsWith(UID, "UID-DLP-SA906")),
                        compare_algorithms %>% dplyr::mutate(technology2=dplyr::case_when(technology == "ACT" & dtype == "patient" ~ "ACT - tumours",
                                                                                   technology == "ACT" & dtype!="patient" ~ "ACT - cell lines",
                                                                                   TRUE ~ "NA")) %>%
-  dplyr::mutate(technology = factor(technology2, ordered=TRUE, levels=c("10X", "DLP", "ACT - cell lines", "ACT - tumours")))) %>%
+  dplyr::mutate(technology = factor(technology2, ordered=TRUE, levels=c("10X", "DLP+", "ACT - cell lines", "ACT - tumours")))) %>%
   dplyr::mutate(method2 = factor(method, ordered=TRUE, levels=c("exp", "hmmcopy", "scAbsolute", "ginkgo", "chisel"))) %>%
   dplyr::mutate(rpc_unbiased = used.reads / (ploidy * 6206)) %>%
   dplyr::filter(rpc_unbiased > 25) %>%
   dplyr::select(-method) %>% dplyr::rename(method=method2) %>%
   dplyr::mutate(method2 = base::interaction(UID3, method)) %>%
-  dplyr::mutate(grid1 = ifelse(technology %in% c("10X", "DLP"), "noACT", "yesACT"), 
+  dplyr::mutate(grid1 = ifelse(technology %in% c("10X", "DLP+"), "noACT", "yesACT"), 
                 grid2 = dplyr::case_when(technology == "ACT - cell lines" ~ "left",
                                          technology == "ACT - tumours" ~ "right",
                                          technology == "10X" ~ "left",
-                                         technology == "DLP" ~ "right",
+                                         technology == "DLP+" ~ "right",
                                          TRUE ~ "other"
                                          ))
 
@@ -684,12 +684,12 @@ levels(dat$method2)
 #custom_labeller = 
 
 
-Fig_ploidy_I_a = ggplot(data = dat %>% dplyr::filter(technology %in% c("10X", "DLP"))) +
+Fig_ploidy_I_a = ggplot(data = dat %>% dplyr::filter(technology %in% c("10X", "DLP+"))) +
   geom_point(aes(x=1, y=NA, color=factor(method, levels=c("exp", "hmmcopy", "scAbsolute", "ginkgo", "chisel"))), size=0) +
   geom_quasirandom(aes(y=base::interaction(UID2, method), color=method, x=ploidy), alpha=1.0, size=1.0, groupOnX = FALSE) +
   geom_tile(data=ploidy_table %>% dplyr::filter(technology=="10X") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=0.8),alpha=0.5,fill="grey") +
-  geom_tile(data=ploidy_table %>% dplyr::filter(technology=="DLP") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=0.8),alpha=0.0,fill="white") +
-  geom_point(data=ploidy_table %>% dplyr::filter(technology=="10X") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy), size=2, shape=3, color="red") +
+  geom_tile(data=ploidy_table %>% dplyr::filter(technology=="DLP+") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=0.8),alpha=0.0,fill="white") +
+  geom_point(data=ploidy_table %>% dplyr::filter(technology=="10X") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy), size=3, shape=3, color="red") +
   geom_point(data=ploidy_table %>% dplyr::filter(technology=="10X") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*0.5), size=2, shape=8, color="blue", position=position_nudge(x=0,y=0.0)) +
   geom_point(data=ploidy_table %>% dplyr::filter(technology=="10X") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*2.0), size=2, shape=8, color="blue", position=position_nudge(x=0,y=0.0)) +
   #geom_tile(data=ploidy_table %>% dplyr::filter(startsWith(as.character(technology), "ACT")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=2.4),alpha=0.5,fill="grey", position=position_nudge(x=0,y=-1.0)) +
@@ -729,14 +729,15 @@ Fig_ploidy_I_a
 
 Fig_ploidy_I_b = ggplot(data = dat %>% dplyr::filter(technology %in% c("ACT - cell lines", "ACT - tumours"))) +
   geom_point(aes(x=1, y=NA, color=factor(method, levels=c("exp", "hmmcopy", "scAbsolute", "ginkgo", "chisel"))), size=0) +
-  geom_quasirandom(aes(y=base::interaction(UID2, method), color=method, x=ploidy), alpha=1.0, size=1.0, groupOnX = FALSE) +
+  geom_quasirandom(aes(y=base::interaction(UID2, method), color=method, x=ploidy), alpha=1.0, size=1.0, groupOnX = FALSE, bandwidth=2.0) +
   #geom_tile(data=ploidy_table %>% dplyr::filter(technology=="10X") %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=0.8),alpha=0.5,fill="grey") +
   geom_tile(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=3.6),alpha=0.5,fill="grey", position=position_nudge(x=0,y=-1.5)) +
-  geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy), size=2, shape=3, color="red", position=position_nudge(x=0,y=-1.5)) +
+  geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy), size=3, shape=3, color="red", position=position_nudge(x=0,y=-1.5)) +
+  #geom_segment(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy, y=-1, yend=1), size=2, color="red", position=position_nudge(x=0,y=-1.5)) +
   geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*0.5), size=2, shape=8, color="blue", position=position_nudge(x=0,y=-1.5)) +
   geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "lines")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*2.0), size=2, shape=8, color="blue", position=position_nudge(x=0,y=-1.5)) +
   geom_tile(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "tumours")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method),x=ploidy, width=1.0,height=3.6),alpha=0.5,fill="grey", position=position_nudge(x=0,y=-1.5)) +
-  geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "tumours")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy), size=2, shape=3, color="red", position=position_nudge(x=0,y=-1.5)) +
+  geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "tumours")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy), size=3, shape=3, color="red", position=position_nudge(x=0,y=-1.5)) +
   geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "tumours")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*0.5), size=2, shape=8, color="blue", position=position_nudge(x=0,y=-1.5)) +
   geom_point(data=ploidy_table %>% dplyr::filter(endsWith(as.character(technology), "tumours")) %>% dplyr::mutate(method="scAbsolute"), aes(y=interaction(UID2, method), x=ploidy*2.0), size=2, shape=8, color="blue", position=position_nudge(x=0,y=-1.5)) +
   facet_wrap(~technology, scales = "free_y", drop=TRUE, strip.position = "top", ncol=2) +
@@ -774,7 +775,7 @@ leg = get_legend(Fig_ploidy_I_b)
 Fig_ploidy_I = ggpubr::ggarrange(leg, 
                                  Fig_ploidy_I_a + rremove("xlab") + rremove("ylab"),
                                  Fig_ploidy_I_b + rremove("ylab") + theme(legend.position = "none"),
-                                 nrow=3, labels=c("", "", ""), heights = c(1, 3, 5))
+                                 nrow=3, labels=c("", "", ""), heights = c(1, 3, 6))
 Fig_ploidy_I = annotate_figure(Fig_ploidy_I, left = textGrob("sample", rot = 90, vjust = 0.5, gp = gpar(cex = 1.5)))
 Fig_ploidy_I
 
@@ -1166,3 +1167,17 @@ ggpubr::ggexport(Sup_ploidy_replicating_conserved, filename = "~/scAbsolute/figu
 #  geom_abline(slope=0.00066, intercept=1.0, color="red")
 #
 
+# check variability among NNA datasets
+ggplot(data = predict_replicating(pd) %>% dplyr::filter(startsWith(UID, "UID-NNA")) %>%
+         dplyr::group_by(UID) %>% dplyr::mutate(med_ploidy = median(ploidy), med_cyc = median(cycling_activity))) +
+  geom_quasirandom(aes(x=UID, y=cycling_activity, color=UID)) +
+  theme_pubclean()
+
+ggplot(data = predict_replicating(pd) %>% dplyr::filter(startsWith(UID, "UID-NNA")) %>%
+         dplyr::group_by(UID) %>% dplyr::mutate(med_ploidy = median(ploidy),
+                                                med_rpc = median(rpc),
+                                                med_reads = median(used.reads),
+                                                med_cyc = median(cycling_activity))) +
+  geom_point(aes(x=med_rpc, y=med_cyc, color=UID)) +
+  geom_vline(xintercept=25) +
+  theme_pubclean()

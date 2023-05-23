@@ -779,7 +779,7 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
   readCountsFiltered <- QDNAseq::applyFilters(readCounts, residual=FALSE, blacklist=TRUE, mappability = NA, chromosomes = filterChromosomes, verbose=FALSE)
   Biobase::fData(readCountsFiltered)[["use"]] = extendedFilter & !is.na(Biobase::fData(readCounts)[["gc"]])
   fdat = Biobase::fData(readCountsFiltered)
-  if(binSize %in% c(30, 50, 100, 500, 1000)){
+  if(binSize %in% c(30, 50, 100, 500, 1000) && species == "Human"){
     repTime = readRDS(file.path(BASEDIR, "data/replicationTiming/replicationTiming_per_binSize.RDS"))[[as.character(binSize)]]
     fdat$replicationTiming = repTime$replicationTime
   }

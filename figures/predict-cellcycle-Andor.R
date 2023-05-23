@@ -195,7 +195,7 @@ ggplot(data=x) + geom_quasirandom(aes(x="NA", y=cycling_activity, color=replicat
 
 leg = get_legend(p1)
 Sup_cellcycle_cellines = ggpubr::ggarrange(p1, p2,
-                               labels=c("A", "B"), nrow=1, ncol=2, common.legend = TRUE, legend.grob = leg) #, hjust=1.8)
+                               labels=c("a", "b"), nrow=1, ncol=2, common.legend = TRUE, legend.grob = leg) #, hjust=1.8)
 #Fig_ploidy_examples = annotate_figure(Fig_ploidy_examples, left = textGrob("absolute copy number", rot = 90, vjust = 1, gp = gpar(cex = 1.3)))
 Sup_cellcycle_cellines
 
@@ -231,7 +231,7 @@ p4
 
 leg = get_legend(p3)
 Sup_cellcycle_transfer = ggpubr::ggarrange(p3 + rremove("x.title") + rremove("y.title"), p4 + rremove("y.title"), legend.grob = leg, common.legend = TRUE,
-                               labels=c("A", "B"), nrow=2, ncol=1, hjust=1.8, vjust=1.6)
+                               labels=c("a", "b"), nrow=2, ncol=1, hjust=1.8, vjust=1.6)
 Sup_cellcycle_transfer = annotate_figure(Sup_cellcycle_transfer, left = textGrob("Cycling activity", rot = 90, vjust = 1, gp = gpar(cex = 1.3)))
 Sup_cellcycle_transfer
 

@@ -26,7 +26,7 @@ files = c(
   paste0("~/Data/project1/30-scale/", binSizeValue, "/predict/", 
          paste0(c(
            "UID-DLP-SA1044",
-           "UID-DLP-SA928"
+           "UID-DLP-SA928-cellcycle"
          ), "_", binSizeValue, ".rds")))
 pd = dplyr::bind_rows(lapply(files, 
                              function(x) Biobase::pData(readRDS(x)) )) %>%
@@ -121,12 +121,13 @@ p4 = plotCopynumber(CN[, w2[3]], correction = TRUE, main="", readinfo = FALSE, s
 p4
 
 
-Sup_ploidy_examples = ggpubr::ggarrange(p1 + rremove("x.title") + rremove("y.title"),
+Sup_ploidy_examples2 = ggpubr::ggarrange(p1 + rremove("x.title") + rremove("y.title"),
                                         p2 + rremove("y.title") + rremove("x.title"),
                                         p3 + rremove("x.title") + rremove("y.title"),
                                         p4 + rremove("y.title"),
-                               labels=c("A", "", "B", ""), nrow=4, ncol=1, hjust=1.8)
-Sup_ploidy_examples = annotate_figure(Sup_ploidy_examples, left = textGrob("absolute copy number", rot = 90, vjust = 1, gp = gpar(cex = 1.3)))
+                               labels=c("a", "", "b", ""), nrow=4, ncol=1, hjust=1.4, font.label=list(size=20))
+Sup_ploidy_examples = annotate_figure(Sup_ploidy_examples2, left = textGrob("   absolute copy number                                                                               absolute copy number", rot = 90, vjust = .5, gp = gpar(cex = 1.5)))
+#Sup_ploidy_examples = annotate_figure(Sup_ploidy_examples3, left = textGrob("absolute copy number", rot = 90, vjust = 5.5, hjust=0.5, gp = gpar(cex = 1.5)))
 Sup_ploidy_examples
 
 ggpubr::ggexport(Sup_ploidy_examples, filename = "~/scAbsolute/figures/Sup_ploidy_examples.pdf", width=12, height=16)
