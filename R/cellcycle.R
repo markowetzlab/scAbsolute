@@ -25,7 +25,13 @@ cellcycleMetadata <- function(segmentedCounts,segment_size_cutoff=20){
 
     gr_raw = createGR(segmentedCounts[,i,drop=FALSE])
 
-    rep_rle = readRDS(file.path(BASEDIR, "data/replicationTiming/replicationInfo.RDS"))
+    if (species == "Human"){
+      rep_rle = readRDS(file.path(BASEDIR, "data/replicationTiming/replicationInfo.RDS"))
+    } else if (species == "Mouse"){
+      rep_rle = readRDS(file.path(BASEDIR, "data/replicationTiming/replicationInfo_mouse.RDS"))
+    } else {
+      stop("Species is not supported")
+    }
     # accommodate restricted genome regions, i.e. only selected chromosomes
     rep_rle = rep_rle[names(rep_rle) %in% seqlevels(gr_raw)]
     replicationTiming = binnedAverage(gr_raw, rep_rle, "replicationTime", na.rm=TRUE)

@@ -666,7 +666,7 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
   transformFun = "none" # non-linear transformations are not supported
   # QDNAseq only supports these bin sizes out of the box
   bins = c(1, 5, 10, 15, 30, 50, 100, 500, 1000)
-  stopifnot(binSize %in% bins || (binSize %in% c(200, 2000, 5000) && genome %in% c("hg19", "GRCh37")))
+  stopifnot(binSize %in% bins || (binSize %in% c(200, 2000, 5000) && genome %in% c("hg19", "GRCh37", "GRCm38")))
   
 
   # required for smaller binsizes
@@ -757,9 +757,15 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
   
   if(species == "Human"){
     Biobase::pData(readCounts)["genome"] = genome
-    coverage = (readCounts@phenoData@data$used.reads * (as.numeric(isPaired) + 1) * read_size) / 3.2e9
+    coverage = (readCounts@phenoData@data$used.reads * (as.numeric(isPaired) + 1) * read_size) / 3.2e9 #div size of human genome
     Biobase::pData(readCounts)["coverage"] = coverage
   }
+  if(species == "Mouse"){
+    Biobase::pData(readCounts)["genome"] = genome
+    coverage = (readCounts@phenoData@data$used.reads * (as.numeric(isPaired) + 1) * read_size) / 2.5e9 #div size of mouse genome
+    Biobase::pData(readCounts)["coverage"] = coverage
+  }
+  
   
   if(species == "Human" & extendedBlacklisting){
     if(binSize < 10) stop("blacklisting doesn't support binsizes smaller than 10kb")
@@ -779,8 +785,11 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
   readCountsFiltered <- QDNAseq::applyFilters(readCounts, residual=FALSE, blacklist=TRUE, mappability = NA, chromosomes = filterChromosomes, verbose=FALSE)
   Biobase::fData(readCountsFiltered)[["use"]] = extendedFilter & !is.na(Biobase::fData(readCounts)[["gc"]])
   fdat = Biobase::fData(readCountsFiltered)
-  if(binSize %in% c(30, 50, 100, 500, 1000) && species == "Human"){
+  if (binSize %in% c(30, 50, 100, 500, 1000) & species == "Human"){
     repTime = readRDS(file.path(BASEDIR, "data/replicationTiming/replicationTiming_per_binSize.RDS"))[[as.character(binSize)]]
+    fdat$replicationTiming = repTime$replicationTime
+  } else if (binSize %in% c(30, 50, 100, 500, 1000) & species == "Mouse"){
+    repTime = readRDS(file.path(BASEDIR, "data/replicationTiming/replicationTiming_per_binSize_mouse.RDS"))[[as.character(binSize)]]
     fdat$replicationTiming = repTime$replicationTime
   }
 
@@ -820,7 +829,7 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
 #' @return QDNAseq object with updated bin usability
 readFilter <- function(readCounts, genome="GRCh37"){
 
-  stopifnot(genome %in% c("GRCh37", "GRCh38"))
+  stopifnot(genome %in% c("GRCh37", "GRCh38", "GRCm38"))
   if(genome == "GRCh37"){
     gr = createGR(readCounts[,1,drop=FALSE])
     excluded_regions_bed = readr::read_tsv(file.path(BASEDIR, "data/blacklisting/final_exclude_regions_hg19.bed"),
@@ -829,9 +838,18 @@ readFilter <- function(readCounts, genome="GRCh37"){
                                ranges = IRanges(start=excluded_regions_bed$start+1, end=excluded_regions_bed$end),
                                seqinfo = seqinfo(gr))
   }
+  
   if(genome == "GRCh38"){
     warning("blacklist has been optimized for GRCh37 only")
     stop("Not supported")
+  }
+  if(genome == "GRCm38"){
+    gr = createGR(readCounts[,1,drop=FALSE])
+    excluded_regions_bed = readr::read_tsv(file.path(BASEDIR, "data/blacklisting/mm10-blacklist.v2.bed"),
+                                           col_names = c("chromosome", "start", "end", "A" ,"B", "C"), col_types="ciiccc")
+    excluded_regions = GRanges(seqnames=excluded_regions_bed$chromosome,
+                               ranges = IRanges(start=excluded_regions_bed$start+1, end=excluded_regions_bed$end),
+                               seqinfo = seqinfo(gr))
   }
 
   hits <- findOverlaps(excluded_regions, gr)
