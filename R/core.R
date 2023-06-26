@@ -757,15 +757,9 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
   
   if(species == "Human"){
     Biobase::pData(readCounts)["genome"] = genome
-    coverage = (readCounts@phenoData@data$used.reads * (as.numeric(isPaired) + 1) * read_size) / 3.2e9 #div size of human genome
+    coverage = (readCounts@phenoData@data$used.reads * (as.numeric(isPaired) + 1) * read_size) / 3.2e9
     Biobase::pData(readCounts)["coverage"] = coverage
   }
-  if(species == "Mouse"){
-    Biobase::pData(readCounts)["genome"] = genome
-    coverage = (readCounts@phenoData@data$used.reads * (as.numeric(isPaired) + 1) * read_size) / 2.5e9 #div size of mouse genome
-    Biobase::pData(readCounts)["coverage"] = coverage
-  }
-  
   
   if(species == "Human" & extendedBlacklisting){
     if(binSize < 10) stop("blacklisting doesn't support binsizes smaller than 10kb")
@@ -829,7 +823,7 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
 #' @return QDNAseq object with updated bin usability
 readFilter <- function(readCounts, genome="GRCh37"){
 
-  stopifnot(genome %in% c("GRCh37", "GRCh38", "GRCm38"))
+  stopifnot(genome %in% c("GRCh37", "GRCh38"))
   if(genome == "GRCh37"){
     gr = createGR(readCounts[,1,drop=FALSE])
     excluded_regions_bed = readr::read_tsv(file.path(BASEDIR, "data/blacklisting/final_exclude_regions_hg19.bed"),
@@ -838,18 +832,9 @@ readFilter <- function(readCounts, genome="GRCh37"){
                                ranges = IRanges(start=excluded_regions_bed$start+1, end=excluded_regions_bed$end),
                                seqinfo = seqinfo(gr))
   }
-  
   if(genome == "GRCh38"){
     warning("blacklist has been optimized for GRCh37 only")
     stop("Not supported")
-  }
-  if(genome == "GRCm38"){
-    gr = createGR(readCounts[,1,drop=FALSE])
-    excluded_regions_bed = readr::read_tsv(file.path(BASEDIR, "data/blacklisting/mm10-blacklist.v2.bed"),
-                                           col_names = c("chromosome", "start", "end", "A" ,"B", "C"), col_types="ciiccc")
-    excluded_regions = GRanges(seqnames=excluded_regions_bed$chromosome,
-                               ranges = IRanges(start=excluded_regions_bed$start+1, end=excluded_regions_bed$end),
-                               seqinfo = seqinfo(gr))
   }
 
   hits <- findOverlaps(excluded_regions, gr)
