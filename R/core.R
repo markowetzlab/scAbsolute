@@ -666,7 +666,7 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
   transformFun = "none" # non-linear transformations are not supported
   # QDNAseq only supports these bin sizes out of the box
   bins = c(1, 5, 10, 15, 30, 50, 100, 500, 1000)
-  stopifnot(binSize %in% bins || (binSize %in% c(200, 2000, 5000) && genome %in% c("hg19", "GRCh37")))
+  stopifnot(binSize %in% bins || (binSize %in% c(200, 2000, 5000) && genome %in% c("hg19", "GRCh37", "GRCm38")))
   
 
   # required for smaller binsizes
@@ -779,8 +779,11 @@ readData <- function(bamfiles, binSize, species = "Human", filterChromosomes=c("
   readCountsFiltered <- QDNAseq::applyFilters(readCounts, residual=FALSE, blacklist=TRUE, mappability = NA, chromosomes = filterChromosomes, verbose=FALSE)
   Biobase::fData(readCountsFiltered)[["use"]] = extendedFilter & !is.na(Biobase::fData(readCounts)[["gc"]])
   fdat = Biobase::fData(readCountsFiltered)
-  if(binSize %in% c(30, 50, 100, 500, 1000) && species == "Human"){
+  if (binSize %in% c(30, 50, 100, 500, 1000) & species == "Human"){
     repTime = readRDS(file.path(BASEDIR, "data/replicationTiming/replicationTiming_per_binSize.RDS"))[[as.character(binSize)]]
+    fdat$replicationTiming = repTime$replicationTime
+  } else if (binSize %in% c(30, 50, 100, 500, 1000) & species == "Mouse"){
+    repTime = readRDS(file.path(BASEDIR, "data/replicationTiming/replicationTiming_per_binSize_mouse.RDS"))[[as.character(binSize)]]
     fdat$replicationTiming = repTime$replicationTime
   }
 
