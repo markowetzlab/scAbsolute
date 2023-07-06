@@ -4,8 +4,7 @@ library(GenomicRanges)
 require(S4Vectors)
 rm(list=ls())
 
-# reptime_path <- "~/scAbsolute/data/replicationTiming"
-reptime_path <- "/home/adr44/rds/hpc-work/scAbsolute/github/scAbsolute/data/replicationTiming" 
+reptime_path <- "~/scAbsolute/data/replicationTiming"
 
 #Human
 set.seed(2020)
@@ -37,7 +36,7 @@ for (binSize in c(10, 15, 30, 50, 100, 500, 1000)) {
 
 #Mouse
 set.seed(2020)
-exampleBamFile = "/home/adr44/rds/hpc-work/scAbsolute/github/scDNAseq-workflow/mouse_compatibility/data/align/SH171012_I_028.bam"
+exampleBamFile = "~/scDNAseq-workflow/mouse_compatibility/data/align/SH171012_I_028.bam"
 
 options(future.globals.maxSize= 4096*1024^2)
 source("~/scAbsolute/R/core.R")
