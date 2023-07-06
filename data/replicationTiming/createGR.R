@@ -40,7 +40,6 @@ exampleBamFile = "~/scDNAseq-workflow/mouse_compatibility/data/align/SH171012_I_
 
 options(future.globals.maxSize= 4096*1024^2)
 source("~/scAbsolute/R/core.R")
-# source("/home/adr44/rds/hpc-work/scAbsolute/github/scAbsolute/R/core.R")
 
 
 for (binSize in c(10, 15, 30, 50, 100, 500, 1000)) {
