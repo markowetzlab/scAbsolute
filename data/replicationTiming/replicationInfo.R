@@ -7,11 +7,8 @@ require(GenomicRanges)
 require(S4Vectors)
 require(QDNAseq)
 
-# source("~/scAbsolute/R/core.R")
-source("/home/adr44/rds/hpc-work/scAbsolute/github/scAbsolute/R/core.R")
-
-# reptime_path <- "~/scAbsolute/data/replicationTiming"
-reptime_path <- "/home/adr44/rds/hpc-work/scAbsolute/github/scAbsolute/data/replicationTiming" 
+source("~/scAbsolute/R/core.R")
+reptime_path <- "~/scAbsolute/data/replicationTiming"
 
 ##### Human replication information
 
