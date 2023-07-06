@@ -298,7 +298,7 @@ plotCopynumber <- function(object, showUnique=TRUE, round=FALSE, correction=FALS
 
   cellname = Biobase::pData(object)[["name"]]
   title = unlist(strsplit(cellname, "_"))
-  if(length(title) >= 3){
+  if(length(title) > 3){
     if(base::startsWith(title[[4]], "SINCEL")){
       title = paste0(title[[1]], " - ", title[[3]], " - ", paste0(unlist(strsplit(title[[4]], "-"))[2:5], collapse="-"))
     }else{

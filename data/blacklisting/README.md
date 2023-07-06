@@ -14,3 +14,7 @@ ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_36/gencode.v36.a
 
 cat gencode.v36.annotation.gff3 | grep -P "gene\t" | grep -v "^chrM" | cut -f 1,2,4,5,9 | tr ";" "\t" | cut -f 1,2,3,4,6,8 | sed -e 's/gene_id=//g' -e 's/gene_name=//g' >! gencode.v36.tsv
 cat gencode.v19.annotation.gff3 | grep -P "gene\t" | grep -v "^chrM" | cut -f 1,2,4,5,9 | tr ";" "\t" | cut -f 1,2,3,4,6,10 | sed -e 's/gene_id=//g' -e 's/gene_name=//g' >! gencode.v19.tsv
+
+
+Mouse blacklist regions (downloaded from):
+https://github.com/Boyle-Lab/Blacklist/tree/master/lists/mm10-blacklist.v2.bed.gz
