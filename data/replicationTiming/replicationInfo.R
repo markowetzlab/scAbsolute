@@ -97,7 +97,7 @@ saveRDS(rep_rle, file=paste0(reptime_path, "/replicationInfo.RDS"))
 # file source: http://hgdownload.soe.ucsc.edu/goldenPath/mm9/encodeDCC/wgEncodeFsuRepliChip/ or http://genome.ucsc.edu/cgi-bin/hgFileUi?db=mm9&g=wgEncodeFsuRepliChip   ###mouse
 
 
-path = "/home/adr44/rds/hpc-work/scAbsolute/github/scAbsolute/data/replicationTiming/repliChip_data/" #"~/Data/replication-timing/"
+path = "~/scAbsolute/data/replicationTiming/repliChip_data/" #"~/Data/replication-timing/"
 files = c("wgEncodeFsuRepliChipCh12FWaveSignalRep1",
           "wgEncodeFsuRepliChipCh12FWaveSignalRep2",
           "wgEncodeFsuRepliChipEpisc5MWaveSignalRep1",
