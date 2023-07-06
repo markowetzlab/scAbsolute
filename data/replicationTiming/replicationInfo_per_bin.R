@@ -8,8 +8,7 @@ require(S4Vectors)
 require(QDNAseq)
 source("~/scAbsolute/R/core.R")
 
-# reptime_path <- "~/scAbsolute/data/replicationTiming"
-reptime_path <- "/home/adr44/rds/hpc-work/scAbsolute/github/scAbsolute/data/replicationTiming" 
+reptime_path <- "~/scAbsolute/data/replicationTiming"
 
 ##Human
 rep_rle <- readRDS(paste0(reptime_path, "/replicationInfo.RDS"))
