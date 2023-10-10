@@ -4,4 +4,4 @@ Please see the [manuscript](https://www.biorxiv.org/content/10.1101/2022.11.14.5
 
 This repository contains the source code for the *scAbsolute* software and scripts to replicate the figures in the manuscript.
 
-In order to run the code, to see examples of how to use the package and an easy-to-use workflow, we recommend using the lab's (single-cell sequencing pipeline)[https://github.com/markowetzlab/scDNAseq-workflow].
+In order to run the code, to see examples of how to use the package and an easy-to-use workflow, we recommend using the lab's [single-cell sequencing pipeline](https://github.com/markowetzlab/scDNAseq-workflow).
