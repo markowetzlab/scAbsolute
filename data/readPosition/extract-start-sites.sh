@@ -3,7 +3,7 @@
 #A fairly simple script which takes an indexed, co-ordinate sorted bam file as input, marks and remove duplicates, and then produces a table of reads including the reference and genomic start site for each read
 
 # Original author: Thomas Bradley
-# Modified by: Michael Schneider 
+# Modified by: Michael Schneider
 
 input_bam=$1
 relevant_reference_sequences=$2

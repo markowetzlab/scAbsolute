@@ -236,14 +236,14 @@ sum(subject@ranges@width) / sum(gr[seqnames(gr) %in% c("X", "Y")]@ranges@width)
 fig_QC_Sex1 = ggpubr::ggarrange(
   ggpubr::ggarrange(ggparagraph(text=" ", face = "italic", size = 16, color = "white"), gg + rremove("xlab") + rremove("ylab"),
                     ggparagraph(text=" ", face = "italic", size = 16, color = "white"), g1 + theme_cowplot() + theme(strip.background = element_blank(),strip.text.x = element_blank()) + rremove("legend") + rremove("xlab") + ylab("Median of normalized reads per bin") + rremove("ylab"),
-                    ncol=2, nrow=2, labels=c(" ", "a", " ", "b"), widths = c(0.1, 4), hjust=-1.0, vjust=1.5),
+                    ncol=2, nrow=2, labels=c(" ", "a", " ", "b"), widths = c(0.1, 4), hjust=-1.0, vjust=1.5, label.y=c(1, 1, 1, 1.07)),
                     g2 + theme_cowplot() + theme(strip.background = element_blank(),strip.text.x = element_blank()) + rremove("xlab") +
                                  labs(color="Outlier bin ") + ylab("Total reads") + xlab("GC content") + theme(legend.background = element_rect(fill = "white"),
                                                                legend.key = element_rect(fill = "white", color = NA),
                                                                legend.key.width = unit(0.5,"cm"),
                                                                legend.position = c(0.85, 0.8)
                                                                ),
-                   labels=c("A", "B"),  ncol=1, nrow=2, heights = c(2, 1))
+                   labels=c("", "c"), label.x=0.03, label.y=1.05, ncol=1, nrow=2, heights = c(2, 1))
 fig_QC_Sex = ggpubr::annotate_figure(fig_QC_Sex1,
   left = text_grob("Median of normalized reads", rot = 90, size=14, vjust=2.7, hjust=0.1, color="black"),
   bottom = text_grob("GC content", rot = 0, size=14, vjust=0.0, hjust=0.0, color="black"))
@@ -251,7 +251,7 @@ fig_QC_Sex
 
 # NOTE: file requires manual export for some reason to keep proper aspect ratio
 # cowplot::ggsave2(filename = "~/scAbsolute/figures/Supplement-QC-Sex.pdf", fig_QC_Sex, width=4.8, height = 2.7)
-ggpubr::ggexport(fig_QC_Sex, filename = "~/scAbsolute/figures/Sup_QC-Sex.pdf", width=9, height = 6)
+ggpubr::ggexport(fig_QC_Sex, filename = "~/scAbsolute/figures/Sup_QC-Sex_fix.pdf", width=9, height = 6)
 
 stop("Manually uncomment file export to overwrite existing file!")
 # rtracklayer::export.bed(subject, "~/scAbsolute/data/blacklisting/final_exclude_regions_hg19_sex.bed")

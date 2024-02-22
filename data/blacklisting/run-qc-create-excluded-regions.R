@@ -367,9 +367,11 @@ p4 <- ggplot(data.frame(l = "Median of normalized read counts", x = 1, y = 1)) +
 
 p_legend = cowplot::get_legend(p)
 S_fig_QC = ggpubr::ggarrange(ggpubr::ggarrange(gg + rremove("ylab"), 
-                                               ggpubr::ggarrange(venn_plot + theme_nothing() + theme(plot.margin = unit(c(10,5,5,10), "pt")), p_legend, nrow=2, heights = c(2, 1)), widths = c(3, 1), nrow=1, labels=c("A", "B")), 
+                                               ggpubr::ggarrange(venn_plot + theme_nothing() + theme(plot.margin = unit(c(10,5,5,10), "pt")), p_legend, nrow=2, heights = c(2, 1)), widths = c(3, 1), nrow=1, labels=c("a", "b"),
+                                               font.label = list(size=20)), 
                   ggpubr::ggarrange(p + rremove("ylab") + rremove("legend"),
-                                    p2 + rremove("ylab"), widths = c(1, 1), nrow=2, labels=c("C", "D")), 
+                                    p2 + rremove("ylab"), widths = c(1, 1), nrow=2, labels=c("c", "d"),
+                                    font.label = list(size=20)), 
                   ncol = 1, nrow = 2, heights = c(1, 2))
 
 # Annotate the figure by adding a common labels
@@ -377,7 +379,7 @@ S_fig_QC = annotate_figure(S_fig_QC,
                 left = text_grob("Median of normalized read counts", rot = 90, size=22))
 S_fig_QC
 
-ggpubr::ggexport(S_fig_QC,filename = "~/scAbsolute/figures/Sup_QC-Autosomes.pdf", height = 9, width = 16)
+ggpubr::ggexport(S_fig_QC,filename = "~/scAbsolute/figures/Sup_QC-Autosomes_fix.pdf", height = 9, width = 16)
 
 stop("Manually uncomment file export to overwrite existing file!")
 #rtracklayer::export.bed(subject, "~/scAbsolute/data/blacklisting/final_exclude_regions_hg19_1-22.bed")
