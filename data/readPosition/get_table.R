@@ -23,7 +23,11 @@ reference_sizes$reference_size = as.numeric(reference_sizes$reference_size %>% s
 
 # remove unwanted reference sequences
 relevant_reference_sequences = readr::read_tsv(args[2], col_names=c('reference_name', "X2"), col_types="cd") # a single column file with column of relevant reference sequence identifiers
-reference_sizes = reference_sizes %>% dplyr::filter(reference_name %in% relevant_reference_sequences$reference_name)
+reference_sizes = reference_sizes %>% 
+	dplyr::filter(
+		reference_name %in% relevant_reference_sequences$reference_name |
+		reference_name %in% stringr::str_c('chr',relevant_reference_sequences$reference_name)
+	)
 
 # calculate the cumulative sum of the reference sizes
 reference_sizes$cumulative_sum = cumsum(reference_sizes$reference_size)
