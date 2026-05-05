@@ -936,7 +936,8 @@ readPosition <- function(object, filePaths, selectRegion=c(as.character(c(1:22))
     name = Biobase::pData(obj)[["name"]]
 
     read_position_table = readr::read_tsv(paste0(sub('\\.bam$', '', fP), ".position.tsv"), col_types = "cdd")
-    
+    read_position_table$chromosome = gsub("^chr", "", read_position_table$chromosome)
+
     read_table = GRanges(read_position_table$chromosome,
                      IRanges(read_position_table$start, read_position_table$start+abs(read_position_table$length-1)),
                      length=abs(read_position_table$length),

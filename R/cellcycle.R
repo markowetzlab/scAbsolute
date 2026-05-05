@@ -32,9 +32,15 @@ cellcycleMetadata <- function(segmentedCounts,segment_size_cutoff=20){
     } else {
       stop("Species is not supported")
     }
+    # normalize seqlevels to match rep_rle naming (no "chr" prefix)
+    gr_raw_norm = gr_raw
+    current_levels = seqlevels(gr_raw_norm)
+    if (any(grepl("^chr", current_levels))) {
+      seqlevels(gr_raw_norm) = gsub("^chr", "", current_levels)
+    }
     # accommodate restricted genome regions, i.e. only selected chromosomes
-    rep_rle = rep_rle[names(rep_rle) %in% seqlevels(gr_raw)]
-    replicationTiming = binnedAverage(gr_raw, rep_rle, "replicationTime", na.rm=TRUE)
+    rep_rle = rep_rle[names(rep_rle) %in% seqlevels(gr_raw_norm)]
+    replicationTiming = binnedAverage(gr_raw_norm, rep_rle, "replicationTime", na.rm=TRUE)
 
     segmentation = Biobase::assayDataElement(segmentedCounts[valid, i], "segmented")
     counts = Biobase::assayDataElement(segmentedCounts[valid, i], "calls")

@@ -46,7 +46,10 @@ copynumberSegmentation <- function(countsObject, change_prob=1e-1,
   cn_estimate = ifelse(cn_estimate >= max_states, max_states-1, cn_estimate)
   countsObject = Biobase::assayDataElementReplace(countsObject, "copynumber", matrix(cn_estimate, ncol=1))
   alpha_estimate = estimate_overdispersion(countsObject, robust=c(0, max_states-1))
-  ifelse(is.na(alpha_estimate) || is.nan(alpha_estimate), 0.01, alpha_estimate)
+  if(is.na(alpha_estimate) || is.nan(alpha_estimate)){
+    warning(paste0("Cell ", name, ": alpha_estimate is NA/NaN, falling back to 0.01"))
+    alpha_estimate <- 0.01
+  }
   
   if(splitPerChromosome){
     

@@ -410,20 +410,31 @@ computeModel <- function(counts, gr, limitPloidy, scale=1.0, minLength=10, trimL
       gamlss.sigma_coefficient_1 = fit_1$sigma.coefficients[["lw_mean"]]
       
       ## Compute classical ML model for negative binomial and quasi-poisson
-      formula.gam = formula(counts ~ mean)
-      model.nb <- mgcv::gam(formula.gam, data=data.frame(counts=lw_counts, mean=lw_mean), 
-                         family=mgcv::nb(theta = NULL, link = "log"), method = "REML")
-      gam.alpha.devexpl = summary(model.nb)[["dev.expl"]]
-      gam.alpha = 1/model.nb$family$getTheta(TRUE)
-      gam.alpha.coefficient_0 = model.nb$coefficients[["(Intercept)"]]
-      gam.alpha.coefficient_1 = model.nb$coefficients[["mean"]]
-      
-      model.qp <- mgcv::gam(formula.gam, data=data.frame(counts=lw_counts, mean=lw_mean), 
-                            family=quasipoisson(link = "log"), method = "REML")
-      gam.omega.devexpl = summary(model.qp)[["dev.expl"]]
-      gam.omega = summary(model.qp)[["dispersion"]]
-      gam.omega.coefficient_0 = model.qp$coefficients[["(Intercept)"]]
-      gam.omega.coefficient_1 = model.qp$coefficients[["mean"]]
+      if(length(unique(lw_mean)) >= 2 && length(lw_counts) >= 3){
+        formula.gam = formula(counts ~ mean)
+        model.nb <- mgcv::gam(formula.gam, data=data.frame(counts=lw_counts, mean=lw_mean),
+                           family=mgcv::nb(theta = NULL, link = "log"), method = "REML")
+        gam.alpha.devexpl = summary(model.nb)[["dev.expl"]]
+        gam.alpha = 1/model.nb$family$getTheta(TRUE)
+        gam.alpha.coefficient_0 = model.nb$coefficients[["(Intercept)"]]
+        gam.alpha.coefficient_1 = model.nb$coefficients[["mean"]]
+
+        model.qp <- mgcv::gam(formula.gam, data=data.frame(counts=lw_counts, mean=lw_mean),
+                              family=quasipoisson(link = "log"), method = "REML")
+        gam.omega.devexpl = summary(model.qp)[["dev.expl"]]
+        gam.omega = summary(model.qp)[["dispersion"]]
+        gam.omega.coefficient_0 = model.qp$coefficients[["(Intercept)"]]
+        gam.omega.coefficient_1 = model.qp$coefficients[["mean"]]
+      }else{
+        gam.alpha.devexpl = NA
+        gam.alpha = NA
+        gam.alpha.coefficient_0 = NA
+        gam.alpha.coefficient_1 = NA
+        gam.omega.devexpl = NA
+        gam.omega = NA
+        gam.omega.coefficient_0 = NA
+        gam.omega.coefficient_1 = NA
+      }
       
       ## Compute (more robust?) classical ML model for negative binomial, 
       # 1. filtering based on beta estimation unscaled
