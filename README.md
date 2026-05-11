@@ -15,6 +15,28 @@ This repository contains the source code for the *scAbsolute* software and scrip
 
 In order to run the code, to see examples of how to use the package and an easy-to-use workflow, we recommend using the lab's [single-cell sequencing pipeline](https://github.com/markowetzlab/scDNAseq-workflow).
 
+## Genome support
+
+scAbsolute is optimized for **hg19/GRCh37**, which is the default. hg38/GRCh38 is partially supported but has three known limitations:
+
+1. **Extended blacklisting is not implemented for hg38.** The blacklisting step (`readFilter()`) uses a curated BED file of low-quality regions (centromeres, etc.) that exists only for GRCh37. Running with `genome="hg38"` will produce a hard stop unless this step is disabled.
+
+2. **Replication timing data is GRCh37-based.** The pre-computed replication timing values used in bin correction are derived from hg19 ENCODE data. They are applied to hg38 bins without coordinate remapping, so timing values will be assigned to the wrong bins for hg38 data.
+
+3. **Custom bin sizes are unavailable for hg38.** The 200, 2000, and 5000 kb bin sizes are only available for GRCh37. Standard QDNAseq bin sizes (1–1000 kb) work for hg38 via the `QDNAseq.hg38` package.
+
+### Workaround for hg38
+
+To run with hg38 today, disable the extended blacklisting step:
+
+```r
+scAbsolute(input, genome = "hg38", extendedBlacklisting = FALSE, ...)
+```
+
+This falls back to QDNAseq's built-in blacklisting and avoids the hard stop. Be aware that replication timing correction remains unreliable for hg38 (limitation 2 above).
+
+Full hg38 support would require: (1) generating a curated `final_exclude_regions_hg38.bed` from the existing `data/blacklisting/extendedBlacklisting-GRCh38.RDS`, (2) implementing the GRCh38 branch in `readFilter()`, and (3) computing hg38-specific replication timing values. Contributions are welcome.
+
 ## Per-cell failure detection
 
 When running scAbsolute on many cells (e.g. via the scDNAseq-workflow Snakemake pipeline), some cells may fail the scaling step. Failed cells are now retained in the output object with a `failure_reason` field in their metadata, rather than crashing the process and producing an empty file.
