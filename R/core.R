@@ -844,13 +844,17 @@ readFilter <- function(readCounts, genome="GRCh37"){
   }
   if(genome == "GRCm38"){
     gr = createGR(readCounts[,1,drop=FALSE])
+    valid_chrs = seqlevels(gr)
     blacklist_bed = readr::read_tsv(file.path(BASEDIR, "data/blacklisting/mm10-blacklist.v2.bed"),
                                     col_names = c("chromosome", "start", "end", "reason"), col_types="ciic")
     pericentro_bed = readr::read_tsv(file.path(BASEDIR, "data/blacklisting/mm10_pericentromeric_exclude.bed"),
                                      col_names = c("chromosome", "start", "end"), col_types="cii")
+    segdup_bed = readr::read_tsv(file.path(BASEDIR, "data/blacklisting/mm10_segdup.bed"),
+                                 col_names = c("chromosome", "start", "end"), col_types="cii")
     excluded_regions_bed = dplyr::bind_rows(
       blacklist_bed[, c("chromosome", "start", "end")],
-      pericentro_bed
+      pericentro_bed,
+      segdup_bed[segdup_bed$chromosome %in% valid_chrs, ]
     )
     excluded_regions = GRanges(seqnames=excluded_regions_bed$chromosome,
                                ranges = IRanges(start=excluded_regions_bed$start+1, end=excluded_regions_bed$end),
