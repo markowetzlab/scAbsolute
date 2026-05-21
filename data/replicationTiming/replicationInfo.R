@@ -94,10 +94,12 @@ saveRDS(rep_rle, file=paste0(reptime_path, "/replicationInfo.RDS"))
 
 ##### Mouse replication information
 
-# file source: http://hgdownload.soe.ucsc.edu/goldenPath/mm9/encodeDCC/wgEncodeFsuRepliChip/ or http://genome.ucsc.edu/cgi-bin/hgFileUi?db=mm9&g=wgEncodeFsuRepliChip   ###mouse
+# Source: FSU RepliChip WaveSignal BigWig files (originally mm9), lifted to mm10
+# using the UCSC mm9->mm10 liftover chain.  Run liftover_mm9_to_mm10.sh first
+# to populate repliChip_data_mm10/ before executing this section.
+# Original mm9 source: http://genome.ucsc.edu/cgi-bin/hgFileUi?db=mm9&g=wgEncodeFsuRepliChip
 
-
-path = "~/scAbsolute/data/replicationTiming/repliChip_data/" #"~/Data/replication-timing/"
+path = "~/scAbsolute/data/replicationTiming/repliChip_data_mm10/"
 files = c("wgEncodeFsuRepliChipCh12FWaveSignalRep1",
           "wgEncodeFsuRepliChipCh12FWaveSignalRep2",
           "wgEncodeFsuRepliChipEpisc5MWaveSignalRep1",
