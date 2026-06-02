@@ -2,5 +2,8 @@ RepliChip file sources:
 Human (hg19)
 http://genome.ucsc.edu/cgi-bin/hgFileUi?db=hg19&g=wgEncodeFsuRepliChip
 
-Mouse (mm9)
-http://genome.ucsc.edu/cgi-bin/hgFileUi?db=mm9&g=wgEncodeFsuRepliChip
+Mouse (mm10)
+FSU RepliChip WaveSignal files lifted from mm9 to mm10 using the UCSC liftover chain.
+Run liftover_mm9_to_mm10.sh to download the mm9 source files and perform the liftover.
+Original mm9 source: http://genome.ucsc.edu/cgi-bin/hgFileUi?db=mm9&g=wgEncodeFsuRepliChip
+Liftover chain: https://hgdownload.soe.ucsc.edu/goldenPath/mm9/liftOver/mm9ToMm10.over.chain.gz
