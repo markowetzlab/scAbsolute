@@ -59,11 +59,24 @@ cellcycleMetadata <- function(segmentedCounts,segment_size_cutoff=20){
         return(list("pval"=NA, "tau"=NA, "tau_corrected"=NA, "cor_corrected"=NA))
       }
       co = counts[index == x]
-      if(all(co == 0)){
+      if(all(co == 0, na.rm=TRUE)){
         return(list("pval"=NA, "tau"=NA, "tau_corrected"=NA, "cor_corrected"=NA))
       }
       time = repTime[index == x]
       covar = gc_map_covariate[index == x]
+      # Mann-Kendall (and the partial-MK / partial-spearman calls below) all
+      # need >=3 jointly-non-NA values. With aggressive mouse filtering
+      # (blacklist + pericentromeric + segdup) and mm10-liftover gaps in
+      # the replication-timing track, a long segment can clear the size
+      # cutoff but still have <3 bins that are non-NA across co, time and
+      # covar simultaneously. base::sort(time, ...) drops NAs from time
+      # silently, so the resulting idx is shorter than the segment and
+      # co[idx] feeds a degenerate vector into Kendall::MannKendall,
+      # triggering stop("length(x)<3") inside the package.
+      jointly_valid = !is.na(co) & !is.na(time) & !is.na(covar)
+      if(sum(jointly_valid) < 3){
+        return(list("pval"=NA, "tau"=NA, "tau_corrected"=NA, "cor_corrected"=NA))
+      }
       idx = base::sort(time, index.return=TRUE)$ix
       # ggplot(data=dplyr::tibble(co=co[idx], covar=covar[idx], time=time[idx])) + geom_point(aes(x=time, y=co, color=covar))
       trend.kendall_test = Kendall::MannKendall(co[idx])
@@ -186,6 +199,12 @@ cellcycle_gctest <- function(segmentedCounts, segment_size_cutoff=20){
       }
       co = counts[index == x]
       time = gc[index == x]
+      # See cellcycleMetadata above for the same guard. base::sort(time, ...)
+      # silently drops NA time values, so the segment can clear the size
+      # gate but still feed a <3-length vector to Kendall::MannKendall.
+      if(sum(!is.na(co) & !is.na(time)) < 3){
+        return(list("pval"=NA, "tau"=NA))
+      }
       idx = base::sort(time, index.return=TRUE)$ix
       trend.kendall_test = Kendall::MannKendall(co[idx])
       pv = trend.kendall_test[["sl"]][[1]]
