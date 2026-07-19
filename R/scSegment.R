@@ -113,12 +113,35 @@ copynumberSegmentation <- function(countsObject, change_prob=1e-1,
     }
     
     df_result = dplyr::bind_cols(df_result)
-    
-    df_result[["hmm.alpha"]] = median(c_alpha)
-    df_result[["hmm.alpha_estimate"]] = median(c_alpha_estimate)
-    df_result[["hmm.rpc"]] = median(c_rpc)
-    df_result[["hmm.rpc_zero"]] = median(c_rpc_zero)
-    df_result[["hmm.alpha_zero"]] = median(c_alpha_zero)
+
+    # --- sex-aware / signal-aware chromosome exclusion (chrY on female samples) ---
+    # A chromosome with no coverage (e.g. chrY in a female sample) yields an HMM that
+    # either never trains (epoch1 == 0, logprob == -Inf) or converges to a meaningless
+    # value. Such an entry must not enter the whole-cell summary: a single NaN alpha
+    # otherwise nulls hmm.alpha (via median without na.rm) and crashes downstream QC.
+    # This is decided PER CELL from the fitted signal, so it is correct even when the
+    # sample sex is not annotated. An explicit `sex` ("female"/"male") argument, when
+    # supplied, forces chrY out ("female") or keeps it ("male").
+    chrom_names = as.character(chroms)
+    is_Y = chrom_names %in% c("Y", "chrY", "chrY:", "Y:")
+    no_signal = is.nan(c_alpha) | is.na(c_alpha) | !is.finite(c_logprob)
+    if (exists("sex") && is.character(sex) && tolower(sex) == "female") {
+      drop_chrom = is_Y
+    } else if (exists("sex") && is.character(sex) && tolower(sex) == "male") {
+      drop_chrom = no_signal & !is_Y
+    } else {
+      # auto / unknown: drop any chromosome that produced no valid signal
+      drop_chrom = no_signal
+    }
+    keep = !drop_chrom
+    if (!any(keep)) keep = rep(TRUE, length(c_alpha))  # never drop everything
+
+    df_result[["hmm.alpha"]] = median(c_alpha[keep], na.rm = TRUE)
+    df_result[["hmm.alpha_estimate"]] = median(c_alpha_estimate[keep], na.rm = TRUE)
+    df_result[["hmm.rpc"]] = median(c_rpc[keep], na.rm = TRUE)
+    df_result[["hmm.rpc_zero"]] = median(c_rpc_zero[keep], na.rm = TRUE)
+    df_result[["hmm.alpha_zero"]] = median(c_alpha_zero[keep], na.rm = TRUE)
+    df_result[["hmm.n_chrom_dropped"]] = sum(drop_chrom)
     df_result[["hmm.n_nan"]] = sum(is.na(c_logprob))
     df_result[["hmm.n_oscillations"]] = sum(c_oscillations)
     df_result[["hmm.med_n_oscillations"]] = median(c_oscillations)
