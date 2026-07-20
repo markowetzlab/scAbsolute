@@ -15,6 +15,19 @@ binsToUseInternal <- function(object){
   return(rep(TRUE, times=nrow(object)))
 }
 
+.normalizeChromosomesToSeqlevels <- function(chromosomes, valid_seqlevels){
+  chromosomes = as.character(chromosomes)
+  valid_seqlevels = as.character(valid_seqlevels)
+  seqlevels_use_chr = any(startsWith(valid_seqlevels, "chr"))
+  chromosomes_use_chr = any(startsWith(chromosomes, "chr"))
+  if(seqlevels_use_chr && !chromosomes_use_chr){
+    chromosomes = paste0("chr", chromosomes)
+  }else if(!seqlevels_use_chr && chromosomes_use_chr){
+    chromosomes = sub("^chr", "", chromosomes)
+  }
+  chromosomes
+}
+
 #' getGenomeInformation
 #'
 #' \code{getGenomeInformation} access QDNAseq object genome information
@@ -851,11 +864,15 @@ readFilter <- function(readCounts, genome="GRCh37"){
                                      col_names = c("chromosome", "start", "end"), col_types="cii")
     segdup_bed = readr::read_tsv(file.path(BASEDIR, "data/blacklisting/mm10_segdup.bed"),
                                  col_names = c("chromosome", "start", "end"), col_types="cii")
+    blacklist_bed$chromosome = .normalizeChromosomesToSeqlevels(blacklist_bed$chromosome, valid_chrs)
+    pericentro_bed$chromosome = .normalizeChromosomesToSeqlevels(pericentro_bed$chromosome, valid_chrs)
+    segdup_bed$chromosome = .normalizeChromosomesToSeqlevels(segdup_bed$chromosome, valid_chrs)
     excluded_regions_bed = dplyr::bind_rows(
       blacklist_bed[, c("chromosome", "start", "end")],
       pericentro_bed,
-      segdup_bed[segdup_bed$chromosome %in% valid_chrs, ]
+      segdup_bed
     )
+    excluded_regions_bed = dplyr::filter(excluded_regions_bed, chromosome %in% valid_chrs)
     excluded_regions = GRanges(seqnames=excluded_regions_bed$chromosome,
                                ranges = IRanges(start=excluded_regions_bed$start+1, end=excluded_regions_bed$end),
                                seqinfo = seqinfo(gr))
@@ -1674,4 +1691,3 @@ exportSignals <- function(object, file, ...){
   write.table(out, file=file,
               quote=FALSE, sep="\t", na="", row.names=FALSE, ...)
 }
-

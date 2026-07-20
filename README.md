@@ -15,6 +15,16 @@ This repository contains the source code for the *scAbsolute* software and scrip
 
 In order to run the code, to see examples of how to use the package and an easy-to-use workflow, we recommend using the lab's [single-cell sequencing pipeline](https://github.com/markowetzlab/scDNAseq-workflow).
 
+## Sex-aware chromosome summaries
+
+For per-chromosome HMM segmentation, `scAbsolute()` accepts `sex="auto"`,
+`sex="female"`, or `sex="male"`. Female mode excludes chromosome Y from
+whole-cell HMM parameter summaries while retaining its per-bin copy-number
+output. Auto and male modes retain chromosome Y when its fitted HMM fields are
+valid. In every mode, chromosomes with non-finite fitted parameters or no
+completed training epoch are excluded with a warning; a cell fails explicitly
+if no valid chromosome remains.
+
 ## Genome support
 
 scAbsolute is optimized for **hg19/GRCh37**, which is the default. hg38/GRCh38 is partially supported but has three known limitations:

@@ -801,6 +801,7 @@ selectSolution <- function(segCN, fit, method, globalModel, predictFunction=NULL
 #' @param penalty penalty to use for segmentation, default is MBIC, alternative see changepoint package
 #' @param pen.value penalty to use when penalty is set to "Manual", see changepoint package for details
 #' @param splitPerChromosome Boolean flag to speed up segmentation by segmentation each chromosome separately (default: false)
+#' @param sex Character sample sex used for chromosome-aware HMM summaries: "auto", "female", or "male" (default: "auto")
 #' @param initialTestStatistics testStatistic to use for first pass through data (by default same as testStatistic)
 #' 
 #' @param outputPath Character write segmentation information to this path, (default NULL, works only when outputSegmentation is TRUE)
@@ -824,7 +825,8 @@ scAbsolute <- function(input, method="error", globalModel=NULL,
                        testStatistic="NegBinMM", penalty="MBIC", pen.value=NULL, splitPerChromosome=FALSE,  initialTestStatistic=NULL,
                        max_iterations=201, hmm_path=NULL, change_prob=1e-1, max_states=10,
                        outputPath=NULL, outputSegmentation=FALSE, optimizeSegmentation=FALSE,
-                       gcCorrection=TRUE, doCellcycle=TRUE, debug=FALSE, quick=FALSE, skipForEvaluation=FALSE, readPositionModel=TRUE){
+                       gcCorrection=TRUE, doCellcycle=TRUE, debug=FALSE, quick=FALSE, skipForEvaluation=FALSE, readPositionModel=TRUE,
+                       sex="auto"){
   
   # Make sure either error or model approach is specified!
   if(method %in% c("model")){
@@ -832,6 +834,7 @@ scAbsolute <- function(input, method="error", globalModel=NULL,
   }else{
     stopifnot(is.null(globalModel))
   }
+  sex = match.arg(tolower(sex), c("auto", "female", "male"))
   
   program_start_time <- Sys.time()
 
@@ -1005,7 +1008,7 @@ scAbsolute <- function(input, method="error", globalModel=NULL,
     cs = copynumberSegmentation(scaledCN[,li], change_prob=change_prob,
                                 max_iterations=max_iterations, max_states=max_states,
                                 hmm_path=hmm_path, verbose=debug, gc_correction=gcCorrection,
-                                splitPerChromosome=splitPerChromosome)
+                                splitPerChromosome=splitPerChromosome, sex=sex)
     return(cs[["object"]])}))
   end_time <- Sys.time()
   Biobase::protocolData(scaledsegmentedCN) = protData

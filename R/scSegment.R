@@ -1,4 +1,56 @@
 # Copyright 2022, Michael Schneider, All rights reserved.
+.selectHMMSummaryChromosomes <- function(chrom_names, alpha, alpha_estimate,
+                                         rpc, rpc_zero, alpha_zero, logprob,
+                                         epoch1, n_oscillations,
+                                         sd_oscillations, magnitude_oscillations,
+                                         sex="auto",
+                                         cell_name="unknown"){
+  sex = match.arg(tolower(sex), c("auto", "female", "male"))
+  chrom_names = as.character(chrom_names)
+
+  fields = list(alpha=alpha, alpha_estimate=alpha_estimate, rpc=rpc,
+                rpc_zero=rpc_zero, alpha_zero=alpha_zero, logprob=logprob,
+                epoch1=epoch1, n_oscillations=n_oscillations,
+                sd_oscillations=sd_oscillations,
+                magnitude_oscillations=magnitude_oscillations)
+  field_lengths = vapply(fields, length, integer(1))
+  if(any(field_lengths != length(chrom_names))){
+    stop("HMM summary fields do not match the number of chromosomes")
+  }
+
+  normalized_chroms = sub(":$", "", sub("^chr", "", chrom_names))
+  is_y = normalized_chroms == "Y"
+  finite_fields = Reduce(`&`, lapply(fields, is.finite))
+  valid_signal = finite_fields & epoch1 > 0
+  invalid_signal = !valid_signal
+  forced_female_y = sex == "female" & is_y
+  drop = invalid_signal | forced_female_y
+
+  invalid_names = chrom_names[invalid_signal]
+  if(length(invalid_names) > 0){
+    warning(paste0("Cell ", cell_name,
+                   ": excluding chromosomes with invalid HMM summaries: ",
+                   paste(invalid_names, collapse=", ")))
+  }
+  if(!any(!drop)){
+    stop(paste0("Cell ", cell_name,
+                ": no chromosomes have a valid HMM summary after sex/signal filtering"))
+  }
+
+  list(keep=!drop, drop=drop, is_y=is_y, invalid_signal=invalid_signal,
+       sex=sex, dropped_chromosomes=chrom_names[drop])
+}
+
+.shortChromosomeChangepoints <- function(x){
+  if(length(x) == 0){
+    return(NA_integer_)
+  }
+  if(length(x) == 1){
+    return(1L)
+  }
+  NULL
+}
+
 #' copynumberSegmentation
 #'
 #' \code{copynumberSegmentation} use HMM for copy number inference 
@@ -12,6 +64,7 @@
 #' @param marginal_path path to store state posterior marginals
 #' @param learning_rates list of learning rates to use in optimization
 #' @param verbose
+#' @param sex Character sample sex used for chromosome-aware HMM summaries: "auto", "female", or "male"
 #'
 #' @return a list with the updated object and inference results (result)
 #'
@@ -21,11 +74,13 @@ copynumberSegmentation <- function(countsObject, change_prob=1e-1,
                                    hmm_path=NULL,
                                    learning_rates = list(0.1, 0.01),
                                    verbose=FALSE, gc_correction=TRUE,
-                                   splitPerChromosome=FALSE){
+                                   splitPerChromosome=FALSE,
+                                   sex="auto"){
   
   
   stopifnot(dim(countsObject)[[2]] == 1)
   stopifnot(all(c("alpha", "rpc", "name") %in% colnames(Biobase::pData(countsObject))))
+  sex = match.arg(tolower(sex), c("auto", "female", "male"))
   reticulate::source_python(file.path(BASEDIR, "R/segmentation.py"), convert=TRUE)
   
   valid = binsToUseInternal(countsObject)
@@ -68,7 +123,7 @@ copynumberSegmentation <- function(countsObject, change_prob=1e-1,
     df_result = list()
     state_posterior = c();
     state_marginals = matrix(data=NA, nrow=0, ncol=max_states)
-    c_alpha=c(); c_rpc=c(); c_rpc_zero=c(); c_alpha_zero=c(); c_logprob = c(); c_alpha_estimate = c();
+    c_alpha=c(); c_rpc=c(); c_rpc_zero=c(); c_alpha_zero=c(); c_logprob = c(); c_alpha_estimate = c(); c_epoch1 = c();
     c_oscillations = c(); c_sd_oscillations = c(); c_magnitude_oscillations = c();
     counter = 0
     
@@ -107,6 +162,7 @@ copynumberSegmentation <- function(countsObject, change_prob=1e-1,
       c_rpc_zero=c(c_rpc_zero, result$opt$rpc_zero)
       c_alpha_zero=c(c_alpha_zero, result$opt$alpha_zero)
       c_logprob = c(c_logprob, result$opt$log_prob)
+      c_epoch1 = c(c_epoch1, result$opt$epoch1)
       c_oscillations = c(c_oscillations, result$opt$n_oscillations)
       c_sd_oscillations = c(c_sd_oscillations, result$opt$sd_oscillations)
       c_magnitude_oscillations = c(c_magnitude_oscillations, result$opt$magnitude_oscillations)
@@ -114,39 +170,30 @@ copynumberSegmentation <- function(countsObject, change_prob=1e-1,
     
     df_result = dplyr::bind_cols(df_result)
 
-    # --- sex-aware / signal-aware chromosome exclusion (chrY on female samples) ---
-    # A chromosome with no coverage (e.g. chrY in a female sample) yields an HMM that
-    # either never trains (epoch1 == 0, logprob == -Inf) or converges to a meaningless
-    # value. Such an entry must not enter the whole-cell summary: a single NaN alpha
-    # otherwise nulls hmm.alpha (via median without na.rm) and crashes downstream QC.
-    # This is decided PER CELL from the fitted signal, so it is correct even when the
-    # sample sex is not annotated. An explicit `sex` ("female"/"male") argument, when
-    # supplied, forces chrY out ("female") or keeps it ("male").
     chrom_names = as.character(chroms)
-    is_Y = chrom_names %in% c("Y", "chrY", "chrY:", "Y:")
-    no_signal = is.nan(c_alpha) | is.na(c_alpha) | !is.finite(c_logprob)
-    if (exists("sex") && is.character(sex) && tolower(sex) == "female") {
-      drop_chrom = is_Y
-    } else if (exists("sex") && is.character(sex) && tolower(sex) == "male") {
-      drop_chrom = no_signal & !is_Y
-    } else {
-      # auto / unknown: drop any chromosome that produced no valid signal
-      drop_chrom = no_signal
-    }
-    keep = !drop_chrom
-    if (!any(keep)) keep = rep(TRUE, length(c_alpha))  # never drop everything
+    summary_selection = .selectHMMSummaryChromosomes(
+      chrom_names=chrom_names, alpha=c_alpha, alpha_estimate=c_alpha_estimate,
+      rpc=c_rpc, rpc_zero=c_rpc_zero, alpha_zero=c_alpha_zero,
+      logprob=c_logprob, epoch1=c_epoch1,
+      n_oscillations=c_oscillations, sd_oscillations=c_sd_oscillations,
+      magnitude_oscillations=c_magnitude_oscillations,
+      sex=sex, cell_name=name)
+    keep = summary_selection$keep
+    drop_chrom = summary_selection$drop
 
-    df_result[["hmm.alpha"]] = median(c_alpha[keep], na.rm = TRUE)
-    df_result[["hmm.alpha_estimate"]] = median(c_alpha_estimate[keep], na.rm = TRUE)
-    df_result[["hmm.rpc"]] = median(c_rpc[keep], na.rm = TRUE)
-    df_result[["hmm.rpc_zero"]] = median(c_rpc_zero[keep], na.rm = TRUE)
-    df_result[["hmm.alpha_zero"]] = median(c_alpha_zero[keep], na.rm = TRUE)
+    df_result[["hmm.alpha"]] = median(c_alpha[keep])
+    df_result[["hmm.alpha_estimate"]] = median(c_alpha_estimate[keep])
+    df_result[["hmm.rpc"]] = median(c_rpc[keep])
+    df_result[["hmm.rpc_zero"]] = median(c_rpc_zero[keep])
+    df_result[["hmm.alpha_zero"]] = median(c_alpha_zero[keep])
+    df_result[["hmm.sex"]] = sex
     df_result[["hmm.n_chrom_dropped"]] = sum(drop_chrom)
+    df_result[["hmm.dropped_chromosomes"]] = paste(summary_selection$dropped_chromosomes, collapse=",")
     df_result[["hmm.n_nan"]] = sum(is.na(c_logprob))
-    df_result[["hmm.n_oscillations"]] = sum(c_oscillations)
-    df_result[["hmm.med_n_oscillations"]] = median(c_oscillations)
-    df_result[["hmm.magnitude_oscillations"]] = sum(c_magnitude_oscillations)
-    df_result[["hmm.sd_oscillations"]] = median(c_sd_oscillations)
+    df_result[["hmm.n_oscillations"]] = sum(c_oscillations[keep])
+    df_result[["hmm.med_n_oscillations"]] = median(c_oscillations[keep])
+    df_result[["hmm.magnitude_oscillations"]] = sum(c_magnitude_oscillations[keep])
+    df_result[["hmm.sd_oscillations"]] = median(c_sd_oscillations[keep])
     
     
     
@@ -318,10 +365,9 @@ segment <- function(countsObject, penalty="MBIC", pen.value=NULL, testStatistic=
         }
         perChromosomeCounts = split(tmp, chromosome)
         cpt_split = lapply(perChromosomeCounts, function(x){
-      
-            if(length(x) == 0){
-              # Fix for Y chromosome
-              return(NA)
+            short_chromosome = .shortChromosomeChangepoints(x)
+            if(!is.null(short_chromosome)){
+              return(short_chromosome)
             }
             
             if(costfunc == "non_parametric"){
